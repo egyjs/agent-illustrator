@@ -8,11 +8,16 @@
     "build": "pnpm --filter agent-illustrator build",
     "typecheck": "tsc -p packages/engine && tsc -p packages/mcp-server",
     "test": "vitest run",
-    "smoke": "node packages/mcp-server/dist/cli.mjs --version && node packages/mcp-server/dist/cli.mjs --doctor"
+    "smoke": "node packages/mcp-server/dist/cli.mjs --version && node packages/mcp-server/dist/cli.mjs --doctor",
+    "lint": "eslint .",
+    "check": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
+    "@eslint/js": "catalog:",
     "@types/node": "catalog:",
+    "eslint": "catalog:",
     "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
     "vitest": "catalog:"
   }
 }
