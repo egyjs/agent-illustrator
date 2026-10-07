@@ -78,6 +78,12 @@ Record each outcome here with a date and the evidence (spike test name or doc li
 ### Outcomes recorded (2026-10-07, from the pre-M0 library check in a scratch directory on Node 24.13.1 / Windows 11)
 M0 spike tests re-confirm each outcome inside the repo (and on Linux in CI) before the M1 plan is written.
 
+**M0 in-repo confirmation (2026-10-08, Windows 11, Node 24.13.1; Linux pending CI; see `docs/spikes.md`):**
+- S1, S2 and S6 are confirmed by `spikes/test/r4-mcp.test.ts`, `r2-resvg-text.test.ts` and `r1-paper.test.ts`.
+- F1 is confirmed with "مرحبا Hello". "عدد 123" does not show the bug.
+- New finding **F3:** paper boolean results can hold children with opposite orientation (exclude: +75/−75, signed area about 0). The M1 `paper-adapter` must call `reorient(true, true)` on every boolean result before converting it to the scene.
+- New finding **F4:** `z.looseObject` emits `additionalProperties: {}`, and MCP Inspector's portability check warns on it. M3 advertises `additionalProperties: true` explicitly.
+
 - **S6: Adopted.** `paper/dist/paper-core.js` runs headless with no jsdom: `new PaperScope(); scope.setup(new scope.Size(1,1))` takes about 23 ms.
   - unite/subtract/intersect/exclude/divide, getIntersections, bounds, length, getPointAt/TangentAt/NormalAt/CurvatureAt, `simplify`, `smooth({type:'catmull-rom', factor:0.5})` and `pathData` all work.
   - Boolean fuzz: 9000 rect pairs with coincident edges, 1000 near-tangent circles and 1000 blob pairs gave 0 mismatches and 0 exceptions.

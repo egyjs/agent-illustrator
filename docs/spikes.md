@@ -50,3 +50,17 @@ links the spec decision it settles. The pre-M0 library check (spec "Outcomes rec
 - **Finding F4:** Inspector's schema-portability check warns on the loose schema. `z.looseObject` emits `additionalProperties: {}` ("accepts any value"), and Inspector suggests `{"type":"object","additionalProperties":true}`. The union schema had no warning.
   - **M3 rule:** advertise the `apply_ops` item schema with an explicit `additionalProperties: true` (post-process the zod JSON Schema or use the SDK's `fromJsonSchema()`), and keep strict per-op zod validation on the server.
 - Result: Confirmed (S1 adopted), plus finding F4.
+
+## R3: clients
+See `eval/clients.md`. Inspector CLI passes. Claude Desktop and Claude Code rows are pending the owner's run.
+
+## Summary (2026-10-08)
+- S1 (loose `apply_ops` schema): Confirmed. Advertise `additionalProperties: true` explicitly (F4).
+- S2 (text bounds via resvg getBBox): Confirmed.
+- S6 (paper core without jsdom): Confirmed.
+- F1 (RTL needs RLI…PDI wrapping): Confirmed. RTL anchoring is also computed by the engine.
+- F3 (new): boolean results need `reorient(true, true)` before area/winding use (M1 paper-adapter).
+- F4 (new): loose item schema must spell `additionalProperties: true` (M3).
+- Image delivery in real clients: pending `eval/clients.md` rows (decides how much M3 leans on the FR-11.2 disk fallback).
+- Linux confirmation: pending the first CI run.
+- Changes the M1–M3 plans must absorb: F3 (M1), F1 anchoring note (M8), F4 (M3).
