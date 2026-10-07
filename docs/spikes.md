@@ -35,3 +35,18 @@ links the spec decision it settles. The pre-M0 library check (spec "Outcomes rec
   - **Engine rules for M8:** wrap RTL text content in RLI…PDI when serializing, and compute RTL anchoring in the engine (from the `getBBox` width) instead of relying on `direction`.
 - `textPath` (`xlink:href`) renders along the curve. `toString()` outputs text as paths.
 - Result: Confirmed (S2 adopted; F1 confirmed with a discriminating string).
+
+## R3/R4: MCP SDK v2 stdio server (settles spec S1; R3 client matrix in `eval/clients.md`)
+- Tests: `spikes/test/r4-mcp.test.ts` (8/8 pass, 2026-10-08, Windows 11, Node 24.13.1). Server: `node spikes/src/mcp-probe-server.ts` (Node type stripping, no build).
+- API used, all working as documented in the spec: `new McpServer(info, { instructions })`, `registerTool(name, { inputSchema: z.object(...) }, handler)`, `registerPrompt(name, { argsSchema }, cb)`, `await serveStdio(factory)`. Client: `StdioClientTransport`, `getInstructions()`, `listTools()`, `callTool()`, `getPrompt()`. Differences from the spec: none.
+- stdout purity: startup plus `initialize` (protocol 2025-11-25) produce only JSON-RPC lines.
+- Image block: `{ type: 'image', data: <base64 PNG>, mimeType: 'image/png' }` arrives intact next to a text block.
+- Schema sizes: union `inputSchema` is 14,991 bytes; loose is 638 bytes (about 23× smaller). No `$ref`/`$defs`, even with a shared `point` sub-schema reused 50 times.
+- Loose schema behaviour:
+  - A malformed op (missing `at`) comes back as `isError` with zod's prettified path `[0].at`.
+  - An unknown op name is rejected by the advertised enum.
+  - Valid ops pass.
+- MCP Inspector 2.9.0 CLI `tools/list`: 3 tools, exit 0.
+- **Finding F4:** Inspector's schema-portability check warns on the loose schema. `z.looseObject` emits `additionalProperties: {}` ("accepts any value"), and Inspector suggests `{"type":"object","additionalProperties":true}`. The union schema had no warning.
+  - **M3 rule:** advertise the `apply_ops` item schema with an explicit `additionalProperties: true` (post-process the zod JSON Schema or use the SDK's `fromJsonSchema()`), and keep strict per-op zod validation on the server.
+- Result: Confirmed (S1 adopted), plus finding F4.

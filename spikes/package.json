@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@modelcontextprotocol/client": "catalog:",
+    "@modelcontextprotocol/server": "catalog:",
     "@resvg/resvg-js": "catalog:",
-    "paper": "catalog:"
+    "paper": "catalog:",
+    "zod": "catalog:"
   }
 }
