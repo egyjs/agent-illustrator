@@ -4,6 +4,7 @@ packages:
 
 catalog:
   '@eslint/js': ^10.0.1
+  '@resvg/resvg-js': 2.6.2
   '@types/node': ^22.20.5
   eslint: ^10.12.0
   paper: 0.12.18
