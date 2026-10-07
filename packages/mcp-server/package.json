@@ -1,0 +1,15 @@
+{
+  "name": "agent-illustrator",
+  "version": "0.0.0",
+  "description": "Vector illustration engine for LLM agents, served over MCP.",
+  "type": "module",
+  "bin": { "agent-illustrator": "./dist/cli.mjs" },
+  "files": ["dist"],
+  "engines": { "node": ">=22.18" },
+  "scripts": { "build": "tsdown" },
+  "devDependencies": {
+    "@agent-illustrator/agent-kit": "workspace:*",
+    "@agent-illustrator/engine": "workspace:*",
+    "tsdown": "catalog:"
+  }
+}

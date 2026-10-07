@@ -113,7 +113,9 @@ M0 spike tests re-confirm each outcome inside the repo (and on Linux in CI) befo
   - Develop on Node 24. CI runs Node 22 and 24 on Linux, and Node 24 on Windows.
   - TypeScript `~6.0.3`. TS 7 is npm `latest`, but `typescript-eslint` peers `>=4.8.4 <6.1.0`.
   - `@types/node ^22.20.5` (matches the runtime floor).
-  - pnpm `12.10.1` via `packageManager`, with versions in a `catalog:`.
+  - pnpm `9.15.2` via `packageManager` (the owner's installed version), with versions in a `catalog:`.
+    - pnpm 9's `manage-package-manager-versions` cannot launch pnpm 12 (bin layout changed), and a global upgrade would affect the owner's other projects.
+    - Bump to 12.x after the owner upgrades pnpm globally (M0 ruling, 2026-10-08).
   - vitest `^5.0.3` (`test.projects`).
   - ESLint `^10.12.0` flat config with built-in `no-restricted-imports` / `no-restricted-properties`. No boundaries plugin; pnpm strict `node_modules` enforces package edges.
   - zod `^4.6.5` (the SDK needs 4.2 or later).
