@@ -15,7 +15,11 @@ links the spec decision it settles. The pre-M0 library check (spec "Outcomes rec
   - The M1 `paper-adapter` must reorient every boolean result before converting it to the scene, otherwise `measure` area and winding tests are wrong.
 - `simplify(2.5)`: 200 noisy points → 13 segments, every input point within 4 units of the fit.
 - `smooth({ type: 'catmull-rom', factor: 0.5 })` keeps anchors and adds handles.
-- `insert: false` everywhere leaves `project.isEmpty()` true, so no shared paper state.
+- `insert: false` everywhere leaves the scope's `project.isEmpty()` true. **paper still has global state, though (finding F5, from the final review):**
+  - `scope.Path` is the same class for every scope. With the default `insert`, new items attach to the most recently created or activated scope, not the one they were built from.
+  - Every `PaperScope` stays in the static `PaperScope._scopes` registry, so creating one scope per operation leaks.
+  - Tests: `F5: constructors attach…` and `F5: every PaperScope stays…`.
+  - **M1 rule:** use one long-lived scope (or a small pool), call `scope.activate()` at the start of every adapter call, and use `insert: false` everywhere. This replaces PROJECT_INIT §2.4's "fresh PaperScope per operation".
 - `Path.add()` is typed `Segment | Segment[]`; use `path.lastSegment` after adding.
 - 200 successive unites: 417 ms on Windows 11 / Node 24.13.1.
 - Result: Confirmed (S6 adopted), plus finding F3.
@@ -61,6 +65,7 @@ See `eval/clients.md`. Inspector CLI passes. Claude Desktop and Claude Code rows
 - F1 (RTL needs RLI…PDI wrapping): Confirmed. RTL anchoring is also computed by the engine.
 - F3 (new): boolean results need `reorient(true, true)` before area/winding use (M1 paper-adapter).
 - F4 (new): loose item schema must spell `additionalProperties: true` (M3).
+- F5 (new, final review): paper constructors follow the last activated scope and scopes are never released. Use one long-lived scope plus `activate()` per call, not a scope per operation (M1).
 - Image delivery in real clients: pending `eval/clients.md` rows (decides how much M3 leans on the FR-11.2 disk fallback).
 - Linux confirmation: pending the first CI run.
-- Changes the M1–M3 plans must absorb: F3 (M1), F1 anchoring note (M8), F4 (M3).
+- Changes the M1–M3 plans must absorb: F3 and F5 (M1), F1 anchoring note (M8), F4 (M3).

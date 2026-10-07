@@ -82,6 +82,7 @@ M0 spike tests re-confirm each outcome inside the repo (and on Linux in CI) befo
 - S1, S2 and S6 are confirmed by `spikes/test/r4-mcp.test.ts`, `r2-resvg-text.test.ts` and `r1-paper.test.ts`.
 - F1 is confirmed with "مرحبا Hello". "عدد 123" does not show the bug.
 - New finding **F3:** paper boolean results can hold children with opposite orientation (exclude: +75/−75, signed area about 0). The M1 `paper-adapter` must call `reorient(true, true)` on every boolean result before converting it to the scene.
+- New finding **F5** (final review): paper item constructors attach to the most recently created or activated scope, and every `PaperScope` stays in a static registry. This amends PROJECT_INIT §2.4/§4.2 "fresh PaperScope per operation": use one long-lived scope (or a small pool), call `scope.activate()` at the start of every adapter call, and use `insert: false` everywhere (M1).
 - New finding **F4:** `z.looseObject` emits `additionalProperties: {}`, and MCP Inspector's portability check warns on it. M3 advertises `additionalProperties: true` explicitly.
 
 - **S6: Adopted.** `paper/dist/paper-core.js` runs headless with no jsdom: `new PaperScope(); scope.setup(new scope.Size(1,1))` takes about 23 ms.

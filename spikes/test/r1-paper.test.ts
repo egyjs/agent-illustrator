@@ -1,4 +1,4 @@
-import type paper from 'paper/dist/paper-core.js';
+import paper from 'paper/dist/paper-core.js';
 import { describe, expect, it } from 'vitest';
 import { area, createScope, fromPaper, toPaper, type Subpath } from '../src/paper.ts';
 
@@ -77,6 +77,22 @@ describe('R1: paper.js core runs headless (spec S6)', () => {
     const a = toPaper(scope, [square(0, 0, 10)]);
     a.unite(toPaper(scope, [square(5, 5, 10)]), { insert: false });
     expect(scope.project.isEmpty()).toBe(true);
+  });
+
+  it('F5: constructors attach to the most recently created/activated scope, so callers must activate first', () => {
+    const a = createScope();
+    const b = createScope();
+    // a.Path is the same class as b.Path; with default insert it joins the active (last created) scope.
+    expect(new a.Path.Circle({ center: [0, 0], radius: 5 }).project).toBe(b.project);
+    a.activate();
+    expect(new a.Path.Circle({ center: [0, 0], radius: 5 }).project).toBe(a.project);
+  });
+
+  it('F5: every PaperScope stays in a static registry, so scope-per-operation leaks', () => {
+    const registered = () => Object.keys(Reflect.get(paper.PaperScope, '_scopes') as object).length;
+    const before = registered();
+    for (let i = 0; i < 50; i++) createScope();
+    expect(registered() - before).toBe(50);
   });
 
   it('200 successive unites finish in a bounded time', () => {
