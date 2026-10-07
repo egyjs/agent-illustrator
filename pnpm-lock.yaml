@@ -15,6 +15,9 @@ catalogs:
     eslint:
       specifier: ^10.12.0
       version: 10.12.0
+    paper:
+      specifier: 0.12.18
+      version: 0.12.18
     tsdown:
       specifier: 0.23.0
       version: 0.23.0
@@ -66,6 +69,12 @@ importers:
       tsdown:
         specifier: 'catalog:'
         version: 0.23.0(typescript@6.0.3)
+
+  spikes:
+    dependencies:
+      paper:
+        specifier: 'catalog:'
+        version: 0.12.18
 
 packages:
 
@@ -826,6 +835,10 @@ packages:
   p-locate@5.0.0:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
+
+  paper@0.12.18:
+    resolution: {integrity: sha512-ZSLIEejQTJZuYHhSSqAf4jXOnii0kPhCJGAnYAANtdS72aNwXJ9cP95tZHgq1tnNpvEwgQhggy+4OarviqTCGw==}
+    engines: {node: '>=8.0.0'}
 
   path-exists@4.0.0:
     resolution: {integrity: sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==}
@@ -1725,6 +1738,8 @@ snapshots:
   p-locate@5.0.0:
     dependencies:
       p-limit: 3.1.0
+
+  paper@0.12.18: {}
 
   path-exists@4.0.0: {}
 
