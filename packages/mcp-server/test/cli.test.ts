@@ -18,6 +18,7 @@ describe('agent-illustrator cli', () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toBe('');
     expect(r.stderr).toContain('core-contract.md');
+    expect(r.stderr).toMatch(/guides[\\/]README\.md/); // nested content must survive the copy into dist
   });
 
   it('unknown arguments print usage to stderr and exit 2', () => {
