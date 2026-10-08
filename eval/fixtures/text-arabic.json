@@ -1,0 +1,11 @@
+{
+  "canvas": { "width": 400, "height": 300, "background": "#f1faee" },
+  "ops": [
+    { "op": "text", "id": "title", "content": "مرحبا بالعالم", "x": 200, "y": 55, "size": 40, "weight": "bold", "anchor": "middle", "style": { "fill": "#264653" } },
+    { "op": "text", "id": "subtitle", "content": "رسم المتجهات", "x": 200, "y": 95, "size": 24, "anchor": "middle", "style": { "fill": "#457b9d" } },
+    { "op": "text", "id": "mixed", "content": "Agent وكيل Illustrator", "x": 200, "y": 130, "size": 22, "anchor": "middle", "direction": "auto", "style": { "fill": "#e76f51" } },
+    { "op": "text", "id": "end", "content": "النص إلى اليمين", "x": 380, "y": 168, "size": 20, "anchor": "end", "direction": "rtl", "style": { "fill": "#2a9d8f" } },
+    { "op": "text", "id": "lines", "content": "السطر الأول\nالسطر الثاني", "x": 200, "y": 205, "size": 22, "line_height": 1.4, "anchor": "middle", "style": { "fill": "#6a4c93" } },
+    { "op": "text", "id": "digits", "content": "٢٠٢٦ — الإصدار ١", "x": 200, "y": 283, "size": 20, "anchor": "middle", "style": { "fill": "#e63946" } }
+  ]
+}

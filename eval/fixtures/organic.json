@@ -1,0 +1,17 @@
+{
+  "canvas": { "width": 400, "height": 300, "background": "#e8f4f8", "seed": 7 },
+  "ops": [
+    { "op": "blob", "id": "cloud-a", "cx": 90, "cy": 60, "radius": 40, "points": 8, "randomness": 0.35, "seed": 3, "style": { "fill": "#ffffff", "stroke": "#a8dadc", "strokeWidth": 2 } },
+    { "op": "blob", "id": "cloud-b", "cx": 200, "cy": 45, "radius": 32, "points": 7, "randomness": 0.5, "frequency": 2, "seed": 11, "style": { "fill": "#ffffff", "stroke": "#a8dadc", "strokeWidth": 2 } },
+    { "op": "blob", "id": "sun", "cx": 320, "cy": 65, "radius": 42, "points": 12, "randomness": 0.2, "style": { "fill": "#ffb703" } },
+    { "op": "rect", "id": "box", "x": 30, "y": 115, "width": 90, "height": 60, "style": { "fill": "#f4a261", "stroke": "#264653", "strokeWidth": 3 } },
+    { "op": "roughen", "ids": ["box"], "amount": 4, "detail": 12, "seed": 3 },
+    { "op": "ellipse", "id": "pebble", "cx": 200, "cy": 145, "rx": 45, "ry": 30, "style": { "fill": "#a8dadc", "stroke": "#264653", "strokeWidth": 3 } },
+    { "op": "roughen", "ids": ["pebble"], "amount": 3, "detail": 10 },
+    { "op": "polygon", "id": "scribble", "cx": 320, "cy": 145, "radius": 36, "sides": 5, "style": { "fill": "none", "stroke": "#e63946", "strokeWidth": 4, "strokeJoin": "round" } },
+    { "op": "roughen", "ids": ["scribble"], "amount": 3, "detail": 14, "seed": 9 },
+    { "op": "wave", "id": "far-sea", "x": 0, "y": 200, "width": "100%", "amplitude": 10, "wavelength": 90, "bottom": 300, "style": { "fill": "#457b9d" } },
+    { "op": "wave", "id": "near-sea", "x": 0, "y": 235, "width": "100%", "amplitude": 8, "wavelength": 70, "phase": 90, "bottom": 300, "style": { "fill": "#1d3557", "opacity": 0.85 } },
+    { "op": "wave", "id": "foam", "x": 0, "y": 268, "width": "100%", "amplitude": 5, "wavelength": 50, "style": { "fill": "none", "stroke": "#f1faee", "strokeWidth": 3, "strokeDash": [18, 10], "strokeCap": "round" } }
+  ]
+}

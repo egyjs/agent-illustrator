@@ -1,0 +1,32 @@
+{
+  "canvas": { "width": 400, "height": 300, "background": "#f8f4ec" },
+  "ops": [
+    { "op": "rect", "id": "turned", "x": 25, "y": 25, "width": 60, "height": 40, "style": { "fill": "#e76f51" } },
+    { "op": "transform", "ids": ["turned"], "rotate": 20, "scale": 1.2 },
+    { "op": "rect", "id": "skewed", "x": 125, "y": 25, "width": 60, "height": 40, "style": { "fill": "#e9c46a" } },
+    { "op": "transform", "ids": ["skewed"], "skew": [20, 0] },
+    { "op": "rect", "id": "sheared", "x": 225, "y": 25, "width": 60, "height": 40, "style": { "fill": "#2a9d8f" } },
+    { "op": "transform", "ids": ["sheared"], "matrix": [1, 0.3, 0, 1, 0, -70] },
+    { "op": "rect", "id": "squashed", "x": 315, "y": 25, "width": 60, "height": 40, "style": { "fill": "#457b9d" } },
+    { "op": "transform", "ids": ["squashed"], "scale": [1.2, 0.6], "translate": [0, 12], "pivot": "top-left" },
+    { "op": "rect", "id": "d1", "x": 30, "y": 105, "width": 40, "height": 40, "style": { "fill": "#264653" } },
+    { "op": "rect", "id": "d2", "x": 120, "y": 120, "width": 70, "height": 30, "style": { "fill": "#264653" } },
+    { "op": "rect", "id": "d3", "x": 330, "y": 100, "width": 40, "height": 50, "style": { "fill": "#264653" } },
+    { "op": "distribute", "ids": ["d1", "d2", "d3"], "axis": "x" },
+    { "op": "align", "ids": ["d1", "d2", "d3"], "edge": "center-y", "to": "canvas" },
+    { "op": "rect", "id": "wall", "x": 30, "y": 200, "width": 10, "height": 80, "style": { "fill": "#264653" } },
+    { "op": "rect", "id": "shelf", "x": 44, "y": 225, "width": 70, "height": 10, "style": { "fill": "#e76f51" } },
+    { "op": "snap", "ids": ["shelf"] },
+    { "op": "rect", "id": "body", "x": 150, "y": 235, "width": 60, "height": 30, "radius": 4, "style": { "fill": "#457b9d" } },
+    { "op": "ellipse", "id": "wheel-a", "cx": 166, "cy": 270, "rx": 9, "style": { "fill": "#1d3557" } },
+    { "op": "ellipse", "id": "wheel-b", "cx": 196, "cy": 270, "rx": 9, "style": { "fill": "#1d3557" } },
+    { "op": "group", "id": "cart", "ids": ["body", "wheel-a", "wheel-b"] },
+    { "op": "duplicate", "ids": ["cart"], "offset": [80, -20], "id": "cart-copy" },
+    { "op": "transform", "ids": ["cart-copy"], "rotate": -12, "pivot": "center" },
+    { "op": "rect", "id": "back", "x": 330, "y": 190, "width": 40, "height": 40, "style": { "fill": "#264653" } },
+    { "op": "rect", "id": "front", "x": 345, "y": 205, "width": 40, "height": 40, "style": { "fill": "#e9c46a" } },
+    { "op": "reorder", "ids": ["back"], "to": "front" },
+    { "op": "polygon", "id": "badge", "cx": 0, "cy": 0, "radius": 12, "sides": 8, "style": { "fill": "#e63946" } },
+    { "op": "place", "ids": ["badge"], "relative_to": "canvas", "anchor": "bottom-right", "offset": [-8, -8] }
+  ]
+}

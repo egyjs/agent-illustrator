@@ -1,0 +1,13 @@
+{
+  "canvas": { "width": 400, "height": 300, "background": "#f8f4ec" },
+  "ops": [
+    { "op": "text", "id": "title", "content": "Agent Illustrator", "x": "50%", "y": 55, "size": 36, "weight": "bold", "anchor": "middle", "style": { "fill": "#264653" } },
+    { "op": "text", "id": "subtitle", "content": "Deterministic vector scenes", "x": "50%", "y": 85, "size": 18, "letter_spacing": 2, "anchor": "middle", "style": { "fill": "#457b9d" } },
+    { "op": "text", "id": "left", "content": "Line one\nLine two\nLine three", "x": 30, "y": 130, "size": 20, "line_height": 1.4, "style": { "fill": "#2a9d8f" } },
+    { "op": "text", "id": "middle", "content": "Middle", "x": 200, "y": 130, "size": 20, "anchor": "middle", "style": { "fill": "#e76f51" } },
+    { "op": "text", "id": "right", "content": "Right\nAligned\nBlock", "x": 370, "y": 130, "size": 20, "line_height": 1.4, "anchor": "end", "style": { "fill": "#6a4c93" } },
+    { "op": "rect", "id": "panel", "x": 20, "y": 205, "width": 360, "height": 80, "radius": 10, "style": { "fill": "#264653" } },
+    { "op": "text", "id": "outline", "content": "Outline", "x": 200, "y": 253, "size": "16%", "weight": "bold", "anchor": "middle", "style": { "fill": "#e9c46a", "stroke": "#f4a261", "strokeWidth": 2 } },
+    { "op": "text", "id": "caption", "content": "small caption in white", "x": 200, "y": 274, "size": 12, "anchor": "middle", "style": { "fill": "#ffffff", "fillOpacity": 0.85 } }
+  ]
+}

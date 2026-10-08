@@ -1,0 +1,13 @@
+{
+  "canvas": { "width": 400, "height": 300, "background": "#fdfcf8" },
+  "ops": [
+    { "op": "path_from_points", "id": "polyline", "points": [[20, 80], [60, 30], [100, 80], [140, 30], [180, 80]], "mode": "polyline", "style": { "fill": "none", "stroke": "#264653", "strokeWidth": 4, "strokeJoin": "round" } },
+    { "op": "path_from_points", "id": "smooth", "points": [[220, 80], [260, 30], [300, 80], [340, 30], [380, 80]], "mode": "smooth", "style": { "fill": "none", "stroke": "#e76f51", "strokeWidth": 4 } },
+    { "op": "path_from_points", "id": "fitted", "points": [[20, 150], [45, 130], [70, 160], [95, 128], [120, 158], [150, 135], [180, 150]], "mode": "fit", "tolerance": 6, "style": { "fill": "none", "stroke": "#2a9d8f", "strokeWidth": 4 } },
+    { "op": "path_from_points", "id": "pentagon", "points": [[220, 120], [300, 120], [350, 160], [300, 200], [220, 200]], "closed": true, "style": { "fill": "#e9c46a", "stroke": "#264653", "strokeWidth": 3 } },
+    { "op": "round_corners", "ids": ["pentagon"], "radius": 14 },
+    { "op": "path_commands", "id": "frame", "d": "M 20 215 h 100 v 70 h -100 z M 45 230 h 50 v 40 h -50 z", "fillRule": "evenodd", "style": { "fill": "#8ecae6", "stroke": "#264653", "strokeWidth": 2 } },
+    { "op": "path_commands", "id": "dome", "d": "M 150 285 a 40 40 0 0 1 80 0 z", "style": { "fill": "#f4a261" } },
+    { "op": "path_commands", "id": "ribbon", "d": "M 250 285 C 270 220 300 220 310 250 S 350 290 380 230", "style": { "fill": "none", "stroke": "#6a4c93", "strokeWidth": 5, "strokeCap": "round" } }
+  ]
+}

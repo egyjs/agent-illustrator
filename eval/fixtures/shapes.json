@@ -1,0 +1,18 @@
+{
+  "canvas": { "width": 400, "height": 300, "background": "#f8f4ec" },
+  "ops": [
+    { "op": "rect", "id": "card", "x": 20, "y": 20, "width": 170, "height": 90, "radius": 16, "style": { "fill": "#e9c46a", "stroke": "#264653", "strokeWidth": 4 } },
+    { "op": "rect", "id": "dashed", "x": 210, "y": 20, "width": 170, "height": 90, "style": { "fill": "none", "stroke": "#e76f51", "strokeWidth": 6, "strokeDash": [14, 8], "strokeCap": "round" } },
+    { "op": "ellipse", "id": "oval", "cx": 70, "cy": 165, "rx": 50, "ry": 32, "style": { "fill": "#2a9d8f" } },
+    { "op": "ellipse", "id": "disc", "cx": 165, "cy": 165, "rx": 32, "style": { "fill": "#8ecae6", "stroke": "#264653", "strokeWidth": 3, "fillOpacity": 0.7 } },
+    { "op": "polygon", "id": "hexagon", "cx": 250, "cy": 165, "radius": 34, "sides": 6, "style": { "fill": "#f4a261" } },
+    { "op": "star", "id": "star", "cx": 340, "cy": 165, "outer": 38, "inner": 17, "points": 5, "style": { "fill": "#e63946" } },
+    { "op": "line", "id": "butt", "x1": 30, "y1": 222, "x2": 130, "y2": 222, "style": { "stroke": "#264653", "strokeWidth": 10, "strokeCap": "butt" } },
+    { "op": "line", "id": "round", "x1": 30, "y1": 245, "x2": 130, "y2": 245, "style": { "stroke": "#264653", "strokeWidth": 10, "strokeCap": "round" } },
+    { "op": "line", "id": "square", "x1": 30, "y1": 268, "x2": 130, "y2": 268, "style": { "stroke": "#264653", "strokeWidth": 10, "strokeCap": "square" } },
+    { "op": "polygon", "id": "pentagon", "cx": 190, "cy": 245, "radius": 30, "sides": 5, "rotation": 10, "style": { "fill": "none", "stroke": "#457b9d", "strokeWidth": 6, "strokeJoin": "round" } },
+    { "op": "star", "id": "soft-star", "cx": 270, "cy": 245, "outer": 34, "inner": 16, "points": 6, "roundness": 0.4, "style": { "fill": "#ffb703" } },
+    { "op": "polygon", "id": "triangle", "cx": 350, "cy": 248, "radius": 30, "sides": 3, "style": { "fill": "none", "stroke": "#6a4c93", "strokeWidth": 8, "strokeJoin": "bevel" } },
+    { "op": "line", "id": "horizon", "x1": "5%", "y1": "96%", "x2": "95%", "y2": "96%", "style": { "stroke": "#264653", "strokeWidth": 2 } }
+  ]
+}

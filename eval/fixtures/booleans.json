@@ -1,0 +1,18 @@
+{
+  "canvas": { "width": 400, "height": 300, "background": "#f8f4ec" },
+  "ops": [
+    { "op": "ellipse", "id": "u1", "cx": 82, "cy": 75, "rx": 42, "style": { "fill": "#2a9d8f" } },
+    { "op": "rect", "id": "u2", "x": 100, "y": 40, "width": 70, "height": 70, "radius": 10, "style": { "fill": "#e76f51" } },
+    { "op": "boolean", "mode": "union", "ids": ["u1", "u2"], "id": "union" },
+    { "op": "ellipse", "id": "s1", "cx": 282, "cy": 75, "rx": 48, "style": { "fill": "#264653" } },
+    { "op": "ellipse", "id": "s2", "cx": 310, "cy": 75, "rx": 34 },
+    { "op": "polygon", "id": "s3", "cx": 270, "cy": 75, "radius": 14, "sides": 3 },
+    { "op": "boolean", "mode": "subtract", "ids": ["s1", "s2", "s3"], "id": "subtract" },
+    { "op": "ellipse", "id": "i1", "cx": 82, "cy": 225, "rx": 42, "style": { "fill": "none", "stroke": "#8d99ae", "strokeWidth": 2, "strokeDash": [4, 4] } },
+    { "op": "ellipse", "id": "i2", "cx": 118, "cy": 225, "rx": 42, "style": { "fill": "none", "stroke": "#8d99ae", "strokeWidth": 2, "strokeDash": [4, 4] } },
+    { "op": "boolean", "mode": "intersect", "ids": ["i1", "i2"], "keep": true, "id": "lens", "style": { "fill": "#e9c46a" } },
+    { "op": "star", "id": "x1", "cx": 282, "cy": 225, "outer": 48, "inner": 22, "points": 5, "style": { "fill": "#6a4c93" } },
+    { "op": "ellipse", "id": "x2", "cx": 300, "cy": 232, "rx": 40 },
+    { "op": "boolean", "mode": "exclude", "ids": ["x1", "x2"], "id": "exclude" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "canvas": { "width": 400, "height": 300 },
+  "ops": [
+    { "op": "rect", "id": "sky", "x": 0, "y": 0, "width": "100%", "height": "100%" },
+    { "op": "gradient", "id": "sky-fade", "stops": ["#8ecae6", "#fdfcf8"], "angle": 90, "ids": ["sky"] },
+    { "op": "ellipse", "id": "sun", "cx": 300, "cy": 70, "rx": 40 },
+    { "op": "gradient", "id": "sun-glow", "type": "radial", "stops": ["#fff3b0", "#ffb703"], "center": [0.5, 0.5], "radius": 0.5, "ids": ["sun"] },
+    { "op": "rect", "id": "hills", "x": 0, "y": 180, "width": "100%", "height": 120 },
+    { "op": "gradient", "id": "grass", "stops": [{ "color": "#2d6a4f", "offset": 0 }, { "color": "#52b788", "offset": 0.6 }, { "color": "#b7e4c7", "offset": 1 }], "angle": 0, "ids": ["hills"] },
+    { "op": "wave", "id": "river", "x": 30, "y": 130, "width": 340, "amplitude": 14, "wavelength": 80, "style": { "fill": "none", "strokeWidth": 10, "strokeCap": "round" } },
+    { "op": "gradient", "id": "river-ramp", "stops": ["#e76f51", "#264653"], "angle": 0, "target": "stroke", "ids": ["river"] },
+    { "op": "ellipse", "id": "diagonal", "cx": 70, "cy": 240, "rx": 32 },
+    { "op": "gradient", "id": "corner", "stops": ["#ffffff", "#e63946"], "angle": 45, "ids": ["diagonal"] },
+    { "op": "ellipse", "id": "focal", "cx": 160, "cy": 240, "rx": 32 },
+    { "op": "gradient", "id": "pearl", "type": "radial", "stops": ["#ffffff", "#8ecae6", "#1d3557"], "center": [0.5, 0.5], "radius": 0.6, "focal": [0.3, 0.3], "ids": ["focal"] },
+    { "op": "rect", "id": "banner", "x": 230, "y": 210, "width": 140, "height": 60, "radius": 10, "style": { "stroke": "#264653", "strokeWidth": 3 } },
+    { "op": "gradient", "id": "banner-ramp", "stops": ["#6a4c93", "#ffffff", "#ffb703"], "angle": 20, "ids": ["banner"] }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "canvas": { "width": 400, "height": 300, "background": "#fdfcf8" },
+  "ops": [
+    { "op": "path_commands", "id": "wave", "d": "M 20 100 C 90 20 160 20 200 70 S 330 120 380 40", "style": { "fill": "none", "stroke": "#8ecae6", "strokeWidth": 2 } },
+    { "op": "text_on_path", "id": "riding", "path": "wave", "content": "Riding the wave", "size": 28, "offset": "5%", "keep": true, "style": { "fill": "#264653" } },
+    { "op": "ellipse", "id": "ring", "cx": 110, "cy": 215, "rx": 65, "ry": 55, "style": { "fill": "none", "stroke": "#e9c46a", "strokeWidth": 2 } },
+    { "op": "text_on_path", "id": "around", "path": "ring", "content": "Around and around the ring", "size": 18, "letter_spacing": 1, "keep": true, "style": { "fill": "#2a9d8f" } },
+    { "op": "path_commands", "id": "arc", "d": "M 230 285 Q 300 170 380 285", "style": { "fill": "none", "stroke": "#f4a261", "strokeWidth": 2 } },
+    { "op": "text_on_path", "id": "arabic", "path": "arc", "content": "نص على مسار منحني", "size": 22, "keep": true, "style": { "fill": "#e76f51" } }
+  ]
+}

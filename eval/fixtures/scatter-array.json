@@ -1,0 +1,20 @@
+{
+  "canvas": { "width": 400, "height": 300, "background": "#fdfcf8", "seed": 5 },
+  "ops": [
+    { "op": "ellipse", "id": "leaf", "cx": 0, "cy": 0, "rx": 7, "ry": 3.5, "style": { "fill": "#2a9d8f" } },
+    { "op": "scatter", "id": "leaves", "source": "leaf", "region": { "x": 10, "y": 10, "width": 190, "height": 120 }, "min_distance": 22, "scale": [0.8, 1.4], "rotate": [0, 360], "density": { "angle": 0, "from": 1, "to": 0.3 }, "seed": 7 },
+    { "op": "polygon", "id": "frame", "cx": 300, "cy": 75, "radius": 60, "sides": 6, "style": { "fill": "#f1faee", "stroke": "#264653", "strokeWidth": 3 } },
+    { "op": "ellipse", "id": "dot", "cx": 0, "cy": 0, "rx": 4, "style": { "fill": "#e76f51" } },
+    { "op": "scatter", "id": "dots", "source": "dot", "within": "frame", "min_distance": 14, "seed": 2 },
+    { "op": "path_commands", "id": "curve", "d": "M 20 190 C 90 140 150 240 230 180", "style": { "fill": "none", "stroke": "#8d99ae", "strokeWidth": 2 } },
+    { "op": "rect", "id": "tie", "x": 0, "y": 0, "width": 4, "height": 14, "style": { "fill": "#6c584c" } },
+    { "op": "repeat_along_path", "id": "ties", "source": "tie", "path": "curve", "spacing": 18 },
+    { "op": "ellipse", "id": "ring", "cx": 340, "cy": 185, "rx": 38, "style": { "fill": "none", "stroke": "#8d99ae", "strokeWidth": 2 } },
+    { "op": "polygon", "id": "bead", "cx": 0, "cy": 0, "radius": 6, "sides": 3, "style": { "fill": "#264653" } },
+    { "op": "repeat_along_path", "id": "beads", "source": "bead", "path": "ring", "count": 12 },
+    { "op": "rect", "id": "tile", "x": 20, "y": 250, "width": 24, "height": 16, "radius": 3, "style": { "fill": "#e9c46a" } },
+    { "op": "array", "id": "grid", "source": "tile", "kind": "grid", "rows": 2, "cols": 5, "gap": [6, 6] },
+    { "op": "ellipse", "id": "petal", "cx": 260, "cy": 238, "rx": 5, "ry": 12, "style": { "fill": "#e63946" } },
+    { "op": "array", "id": "flower", "source": "petal", "kind": "radial", "count": 8, "center": [260, 258] }
+  ]
+}
