@@ -2260,3 +2260,57 @@ git commit -m "feat(ops): register the M4 ops; acceptance scene; docs" -m "Co-Au
 - **M5:** `mask` (with gradient fades), plus the tokens and gradient ops. Gradients become paints (`url(#id)`) via `defs`.
 - **M6:** generators reuse `addPath`, `shapeOf` (scatter inside a shape) and `measure` (repeat along a path).
 - **M7:** `lint` reuses `indexBounds` for overlap pairs and near-miss alignment (the same band query as snap).
+
+## Execution record (2026-10-08)
+
+Executed on branch `m4-ops` by small Sonnet implementer agents, at the owner's request, each with a self-contained brief. They ran in three waves: Tasks 1 and 2 in parallel; Tasks 3–6 in parallel on separate files, with `rbush` installed up front by the orchestrator; then Tasks 7 and 8 in sequence. The orchestrator committed each task, kept the ledger and re-ran the full suite between waves. One fresh final reviewer (Opus) went over the whole branch.
+
+**Rulings made during execution**, each with its cost if wrong:
+- Task 1: the parser rejects non-finite numbers (`1e999`), with "expected a finite number at position N". *Cost if wrong:* none.
+- Task 3: `path_from_points` in polyline mode with only identical points is `invalid_input`, instead of an empty path. *Cost if wrong:* none.
+- Task 4: `boolean.id` uses `IdInput`, following the Decision. A result over `maxSegmentsPerPath` is `limit_exceeded`. *Cost if wrong:* none.
+- Task 5: a singular `matrix` and a skew of ±90° are refused in the schema, because they flatten the node. An explicit point pivot no longer measures bounds, so it works on an empty group. *Cost if wrong:* a legitimate skew close to 90° gets an error with a hint.
+- Task 6: `rbush` 4 ships no types, so a local `analysis/rbush-shim.d.ts` was added; the mcp-server tsconfig includes it.
+  - The plan's grid-snap test input moved from y 47 to y 48: at 47, the center shift of −2 beats the top shift of +3.
+  - Snap skips the moved nodes' own ancestors.
+  - `place` and `align` refuse a reference inside the moved subtree.
+  - `snap` refuses `grid` or `targets` when `to` leaves them out.
+  - *Cost if wrong:* if "center to grid" was meant, the expected y is 45.
+- Task 7: the registry wiring (Task 8 Step 1) went into the Task 7 commit, because `structure2.test` needs `createRegistry`.
+  - The plan's root-order expectations contradicted `group`, which places the group at its topmost member's slot; they were corrected.
+  - `duplicate.id` and `rename.to` use `IdInput`.
+  - `clip` refuses a shape with no subpaths, and `$last` follows the clipped node.
+  - *Cost if wrong:* none.
+- Task 8: `acceptance-m4` is integration over finished ops, so it could not fail first. It was mutation-checked instead (440 → 450 fails).
+
+**Final review: "merge-ready after fixes".** Four findings were rated Important, and one Minor was promoted to Important. All five were fixed, each with a test that failed first and passed after. Suite: 345/345; build and dist smoke OK.
+- **Group operand style.** A `boolean` whose first operand is a group produced an unstyled (black) result. It now takes the group's painted look: styles merged from the group down to its first painted leaf, with opacity multiplied along the way.
+- **Clips in `shapeOf`.** `shapeOf` ignored clips, so booleans and clips used the unclipped area. It now intersects each clipped node, or clipped descendant, with its world clip.
+- **Group union speed.** Unioning a group's children one by one grew without bound: the reviewer measured 12.7 s for 400 circles. Children now union as a balanced tree. One segment cap, `maxSegmentsPerPath`, applies across all operands before paper runs (`limit_exceeded`). The implementer measured 2.3 s → 0.17 s.
+- **Raw `strip_ids` export.** It removed `<clipPath>` ids as well as node ids, so clips were lost. It now keeps ids that a `url(#…)` points at, and both export paths are pinned by a test.
+- **`$last` after ungroup (promoted).** `ungroup $last` left `$last` on the deleted group, so the next `$last` op failed with a misleading hint. `$last` now moves to the topmost released child.
+
+**Rulings made in the fix pass:**
+- A group with no painted leaf falls back to the group's own style.
+- The segment cap counts clip segments as well.
+- A multi-id `boolean` still folds left to right; it is capped at 100 ids.
+- Ungrouping an empty group leaves `$last` alone.
+
+**Deferred minors:**
+1. A `boolean` result gets an identity transform, so a scaled first operand loses its stroke scaling.
+2. `boolean` hardcodes `fillRule: nonzero`. When an operand is empty and the other passes through unchanged, an `evenodd` ring fills in its hole.
+3. `clip` refuses a shape with no subpaths but not one with zero area. A line used as a clip hides the node without a warning.
+4. `round_corners` does not re-check `maxSegmentsPerPath`.
+5. `transform` measures the pivot before `matrix` is applied, but applies rotate and scale after it. `matrix` combined with `rotate` therefore does not turn in place.
+6. `ungroup` multiplies the group's opacity into each child, so overlapping children show through each other. It should warn or refuse.
+7. `star` drops the clamped count from `roundCorners`. Past about 0.21 roundness the tips stop changing, and there is no warning.
+8. Clipped `worldBounds` intersects two boxes, so it is not exact (FR-5.3) when a clip extends past the node in a non-rectangular way.
+9. Grouping siblings that are not adjacent lifts the lower member above the siblings in between, without a warning.
+10. Warnings carry no `hint` field, so `empty_result` and `nothing_to_snap` have none.
+11. The `round_corners` radius is in local units, so a node scaled 3× gets a corner 3× larger. This goes against the canvas-units decision.
+
+The reviewer declined to judge these; each stands as designed:
+- snap matches x and y against nodes anywhere along the other axis
+- distribute `gap` follows Appendix A
+- paper's behavior on extreme coordinates was not probed
+- `group.id` is still `z.string()`, as before M4
