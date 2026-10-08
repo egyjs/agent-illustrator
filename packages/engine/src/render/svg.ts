@@ -11,7 +11,7 @@ export type SvgOptions = { readonly precision?: number };
 /** Formats a number for SVG output at a fixed precision. */
 export type Fmt = (v: number) => string;
 
-function formatter(precision: number): Fmt {
+export function formatter(precision: number): Fmt {
   return (v) => {
     const r = Number(v.toFixed(precision));
     return Object.is(r, -0) ? '0' : String(r);
