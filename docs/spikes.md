@@ -4,7 +4,7 @@ Each section records what the in-repo spike tests proved, with the date, OS and 
 links the spec decision it settles. The pre-M0 library check (spec "Outcomes recorded") is the baseline.
 
 ## R1: paper.js headless (settles spec S6)
-- Tests: `spikes/test/r1-paper.test.ts` (8/8 pass, 2026-10-08, Windows 11, Node 24.13.1).
+- Tests: `spikes/test/r1-paper.test.ts` (8/8 pass, 2026-10-08, Windows 11, Node 24.13.1). Retired in M1 per spec A4. The engine's own tests now cover R1: `packages/engine/test/geometry/paper-adapter.test.ts` (headless scope, F5), `paths.test.ts` (`smooth`, `simplify`) and `boolean.test.ts` (booleans, F3, 200-union timing).
 - Import: `import paper from 'paper/dist/paper-core.js'` plus `spikes/src/paper-shim.d.ts` (`export default paper;` works). No jsdom in the install.
 - Data shape: spec A3 subpaths (`start`, `segs` as `[c1x,c1y,c2x,c2y,x,y]`, `closed`). Open and closed paths round-trip exactly.
 - Booleans:
