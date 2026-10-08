@@ -67,6 +67,7 @@ type Text  = Base & { type: 'text'; content: string; font: FontSpec; anchor: Tex
    - `defs` arrive with M5 (gradients, filters) and `text` with M8.
    - Ids also reject `canvas`, a leading `__`, and Object.prototype names.
    - Paints are CSS colors (via culori), `none`, or token names. SVG output always carries `#rrggbb` or `rgba()`.
+   - M4 (2026-10-08): `clip` stores the clip shape's geometry in the node's local space (`{ subpaths, fillRule }`) instead of a node reference; `mask` moves to M5 with gradients.
 
 ## Open suggestions (Pending evidence)
 Record each outcome here with a date and the evidence (spike test name or doc link).

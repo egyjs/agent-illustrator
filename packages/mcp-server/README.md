@@ -34,7 +34,17 @@ Claude Desktop, Cursor, VS Code and other clients that read an `mcpServers` JSON
 | `render(doc_id, overlays?, region?, scale?, grid?)` | PNG image (also written to disk), with optional id, bounds and grid overlays |
 | `export_svg(doc_id, precision?, optimize?, strip_ids?)` | Final SVG, optimized with SVGO |
 
-Ops so far: `rect`, `ellipse`, `polygon`, `line`, `style`, `group`, `delete`. The `apply_ops` description lists each op's fields.
+Ops (22), by domain:
+
+- shapes: `rect`, `ellipse`, `polygon`, `star`, `line`
+- paths: `path_from_points`, `path_commands`, `round_corners`
+- boolean: `boolean`
+- transform: `transform`
+- layout: `place`, `align`, `distribute`, `snap`
+- style: `style`
+- structure: `group`, `ungroup`, `reorder`, `duplicate`, `rename`, `clip`, `delete`
+
+The `apply_ops` description lists each op's fields.
 
 ## Limits
 
