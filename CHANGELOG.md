@@ -1,0 +1,11 @@
+# Changelog
+
+## 1.0.0 (2026-10-08)
+
+First release: a vector illustration engine for LLM agents, served over MCP stdio.
+
+- **Engine:** cubic-Bézier geometry with exact bounds; paper.js booleans; 36 ops across shapes, paths, booleans, transforms, layout (place, align, distribute, snap), structure, style, color (OKLCH palettes, tokens, OKLab gradients, filters, blend, masks), seeded generators (blob, wave, roughen, scatter, repeat along path, arrays) and native text (Latin and Arabic, text on a path). Transactional batches with `{code, message, hint}` errors; same seed and ops give the same SVG.
+- **Server:** 10 tools (`create_document`, `apply_ops`, `render`, `export_svg`, `describe_scene`, `measure`, `lint`, `history`, `document_io`, `guide`) and the `illustrate` prompt. Bundled fonts, PNG renders with overlays, SVGO export, incremental lint after every batch, undo and checkpoints, saves confined to a per-user folder.
+- **Agent kit:** core contract (server instructions), workflow, topic guides, three style presets, a text-only overlay; every example in it is run in CI.
+- **Evaluation:** render-regression baselines in CI (Linux and Windows); a dev-only harness that drives Claude Code on a subscription; 20 briefs with a raw-SVG baseline. Acceptance: spec A5.
+- **Known limits:** `docs/superpowers/plans/post-v1-backlog.md`.

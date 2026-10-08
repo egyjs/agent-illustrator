@@ -30,6 +30,13 @@ Status legend:
 - **Deterministic render regression (CI):** fixed op scripts (JSON) → engine → PNG → `pixelmatch` against committed baseline PNGs. Pixel diffs are used only where output is deterministic, never on model-generated drawings.
 - **Client compatibility** (at least 2 MCP clients) is a manual smoke checklist in `eval/clients.md`.
 
+## A5. v1 acceptance (Agreed, 2026-10-08). Amends PROJECT_INIT §1.5.
+The owner accepted v1 on the evidence of runs `v1-final` (Sonnet) and `v1-haiku` (Haiku); details are in the M7/M9/M10 plan's execution record.
+- **Criterion 1** (coherent illustration in a reasonable number of calls): met. 40 of 40 tools-mode runs finished, with 3–13 tool calls each.
+- **Criterion 2, reworded:** the tools beat the same model's raw SVG on correctness (counts, placement, text fit), editability (semantic ids, lint, history) and deterministic output, and the gap grows as the model gets smaller. On overall looks, a strong model's raw SVG is comparable. Making the tools win on looks with strong models is post-v1 work (richer presets and style guidance).
+- **Criterion 3, ruled:** evaluation runs through the client the owner pays for, Claude Code headless (`claude -p`, subscription, no API keys), on two Claude model tiers. Codex and other vendors were examples only, not v1 gates. The OpenAI-compatible `--client api` path remains for anyone who wants other families.
+- **Criterion 4:** exported SVG is SVGO-optimized and renders in resvg; CI is green on Linux and Windows. A manual open in a browser and Inkscape is recommended before a public release.
+
 ## A4. Repository layout tweaks (Proposed with the M0 plan)
 - agent-kit content lives in `packages/agent-kit/content/` (core-contract.md, workflow.md, guides/, presets/, prompts/). The package root keeps only `package.json` and `README.md`, so the build copies one folder.
 - Bundled fonts live in `packages/engine/assets/fonts/`. The runtime passes font file paths to the engine, so the engine never guesses install paths.
