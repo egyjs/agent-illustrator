@@ -38,6 +38,7 @@ links the spec decision it settles. The pre-M0 library check (spec "Outcomes rec
   - Also, `text-anchor` "start" stays at the left x even with `direction="rtl"`.
   - **Engine rules for M8:** wrap RTL text content in RLI…PDI when serializing, and compute RTL anchoring in the engine (from the `getBBox` width) instead of relying on `direction`.
 - `textPath` (`xlink:href`) renders along the curve. `toString()` outputs text as paths.
+- Retired in M8: the spike test and its helper (`r2-resvg-text.test.ts`, `src/resvg.ts`) are deleted; `packages/engine/test/render/text-svg.test.ts` and `test/ops/text.test.ts` cover the same behaviour. The engine writes `textPath` with plain `href`, which resvg renders too.
 - Result: Confirmed (S2 adopted; F1 confirmed with a discriminating string).
 
 ## R3/R4: MCP SDK v2 stdio server (settles spec S1; R3 client matrix in `eval/clients.md`)
