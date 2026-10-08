@@ -45,13 +45,19 @@ export function removeSubtree(d: Draft<Doc>, id: string): string[] {
   return removed;
 }
 
+const MAX_UNDO = 50;
+const MAX_CHECKPOINTS = 50;
+const CHECKPOINT_LABEL = /^[A-Za-z0-9_.-]{1,64}$/;
+
 /**
- * A document's current version plus named checkpoints (FR-12.1). Versions are immutable, so a
- * checkpoint is only a reference and restoring one is exact.
+ * A document's current version, an undo stack of the last 50 earlier versions and named
+ * checkpoints (FR-12.1). Versions are immutable, so the stack and the checkpoints only hold
+ * references and going back to one is exact.
  */
 export class DocumentStore {
   #doc: Doc;
   readonly #checkpoints = new Map<string, Doc>();
+  readonly #undo: Doc[] = [];
 
   constructor(doc: Doc) {
     this.#doc = doc;
@@ -61,14 +67,41 @@ export class DocumentStore {
     return this.#doc;
   }
 
+  /** How many versions `undo` can still go back through. */
+  get undoDepth(): number {
+    return this.#undo.length;
+  }
+
+  /** Makes `doc` current and keeps the version it replaces for `undo`; the same version is not a change. */
   commit(doc: Doc): void {
+    if (doc === this.#doc) return;
+    this.#undo.push(this.#doc);
+    if (this.#undo.length > MAX_UNDO) this.#undo.shift();
     this.#doc = doc;
   }
 
+  /** Goes back to the version before the last commit or restore. */
+  undo(): Doc {
+    const previous = this.#undo.pop();
+    if (!previous) {
+      throw new EngineError('invalid_input', 'nothing to undo', `Undo goes back through the last ${MAX_UNDO} changes; this document has none left. Restore a checkpoint instead.`);
+    }
+    this.#doc = previous;
+    return previous;
+  }
+
+  /** Names the current version; saving a label again moves it. */
   checkpoint(label: string): void {
+    if (!CHECKPOINT_LABEL.test(label)) {
+      throw new EngineError('invalid_input', `bad checkpoint label ${JSON.stringify(label.slice(0, 80))}`, 'Use 1-64 letters, digits, "_", "-" or ".", for example "before-sky".');
+    }
+    if (!this.#checkpoints.has(label) && this.#checkpoints.size >= MAX_CHECKPOINTS) {
+      throw new EngineError('limit_exceeded', `a document keeps at most ${MAX_CHECKPOINTS} checkpoints`, `Reuse a label to replace its checkpoint. Existing: ${this.checkpoints().join(', ')}.`);
+    }
     this.#checkpoints.set(label, this.#doc);
   }
 
+  /** Makes the checkpointed version current; the version it replaces goes on the undo stack. */
   restore(label: string): Doc {
     const doc = this.#checkpoints.get(label);
     if (!doc) {
@@ -79,7 +112,7 @@ export class DocumentStore {
         known.length > 0 ? `Known checkpoints: ${known.join(', ')}.` : 'Save a checkpoint before restoring one.',
       );
     }
-    this.#doc = doc;
+    this.commit(doc);
     return doc;
   }
 
