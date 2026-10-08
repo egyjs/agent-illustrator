@@ -1,0 +1,122 @@
+[
+  {
+    "id": "landscape-sunset-lake",
+    "category": "landscape",
+    "brief": "A calm lake at sunset: a warm gradient sky with a low sun, two layers of mountains in the distance, the sun's reflection as a shimmering column on the water, and two pine trees on the left shore.",
+    "canvas": { "width": 800, "height": 600 }
+  },
+  {
+    "id": "landscape-desert-dunes",
+    "category": "landscape",
+    "brief": "Desert dunes at dusk: rolling sand dunes in three shades of orange and brown, a purple-to-orange sky, a small crescent moon, and a single camel caravan of three camels walking along the ridge of the farthest dune.",
+    "canvas": { "width": 1000, "height": 600 }
+  },
+  {
+    "id": "landscape-village-hills",
+    "category": "landscape",
+    "brief": "Rolling green hills in daylight with a small village of four houses of different colors, a winding road leading from the foreground to the village, a blue sky and three fluffy clouds.",
+    "canvas": { "width": 800, "height": 600 }
+  },
+  {
+    "id": "icons-weather",
+    "category": "icon-set",
+    "brief": "A set of four weather icons in a row, each centered in its own 140 px square cell: sun, cloud, rain (a cloud with drops) and snow (a cloud with flakes). One consistent style: the same stroke width, rounded line ends and a two-color palette.",
+    "canvas": { "width": 640, "height": 180 }
+  },
+  {
+    "id": "icons-office",
+    "category": "icon-set",
+    "brief": "A flat icon set of five office items in a row on a light gray background: an envelope, a calendar, a folder, a magnifying glass and a gear. Every icon sits on a white rounded square of the same size, uses the same palette and has a similar visual weight.",
+    "canvas": { "width": 700, "height": 180 }
+  },
+  {
+    "id": "icons-food",
+    "category": "icon-set",
+    "brief": "Six food icons in a 3 by 2 grid: an apple, a slice of pizza, a coffee cup, a burger, a carrot and an ice cream cone. Filled flat style, each icon in its own cell, aligned to a clean grid with equal spacing.",
+    "canvas": { "width": 480, "height": 320 }
+  },
+  {
+    "id": "character-robot",
+    "category": "character-lite",
+    "brief": "A friendly robot mascot seen from the front, built from simple shapes: a rounded square head with an antenna, two round eyes and a smile, a boxy body with a chest panel, jointed arms with one arm raised in a wave, and two feet. Pale background.",
+    "canvas": { "width": 600, "height": 600 }
+  },
+  {
+    "id": "character-cat",
+    "category": "character-lite",
+    "brief": "A cartoon cat sitting in side view with its tail curled around its feet: an orange body with darker stripes, a round head with pointed ears, whiskers, one visible eye and a pink nose.",
+    "canvas": { "width": 600, "height": 600 }
+  },
+  {
+    "id": "character-astronaut",
+    "category": "character-lite",
+    "brief": "An astronaut floating in space: a white suit with a round helmet whose visor shows a curved reflection, a small backpack, arms and legs slightly spread, a tether line trailing out of the frame, and a dark starry background with a distant planet.",
+    "canvas": { "width": 600, "height": 800 }
+  },
+  {
+    "id": "poster-jazz-night",
+    "category": "poster-text",
+    "brief": "A concert poster. The title \"JAZZ NIGHT\" in large bold letters at the top, the line \"Friday 8 PM · Blue Room\" below it, and under that an abstract illustration of a saxophone and a few musical notes in blue and gold on a dark background.",
+    "canvas": { "width": 600, "height": 900 }
+  },
+  {
+    "id": "poster-recycle",
+    "category": "poster-text",
+    "brief": "An awareness poster with the headline \"Recycle more.\" and the smaller line \"Every bottle counts.\" Between the two lines, a green recycling symbol made of three bent arrows around a plastic bottle, on a light cream background.",
+    "canvas": { "width": 600, "height": 900 }
+  },
+  {
+    "id": "poster-book-fair",
+    "category": "poster-text",
+    "brief": "A landscape poster for a book fair. The title \"Annual Book Fair\" in a large serif-like style, the line \"June 12-14 · City Library\" below it, and a row of colorful books of different heights standing on a shelf along the bottom.",
+    "canvas": { "width": 800, "height": 600 }
+  },
+  {
+    "id": "pattern-polka-dots",
+    "category": "pattern",
+    "brief": "A polka-dot pattern in pastel pink, mint and yellow on a cream background. Dots of two sizes sit in a regular grid with every other row shifted by half a spacing, evenly distributed across the whole canvas.",
+    "canvas": { "width": 600, "height": 600 }
+  },
+  {
+    "id": "pattern-starfield",
+    "category": "pattern",
+    "brief": "A night sky with about eighty stars of varying sizes and brightness scattered naturally across a deep blue background (no obvious grid, no big empty gaps), plus a crescent moon in the upper right.",
+    "canvas": { "width": 800, "height": 600 }
+  },
+  {
+    "id": "pattern-hex-tiles",
+    "category": "pattern",
+    "brief": "A honeycomb grid of regular hexagonal tiles that covers the whole canvas, with a thin gap between tiles. The tile color shifts smoothly from teal at the left edge to orange at the right edge.",
+    "canvas": { "width": 600, "height": 600 }
+  },
+  {
+    "id": "iso-cube-stack",
+    "category": "isometric",
+    "brief": "Three isometric cubes stacked in a small pyramid: two on the ground side by side and one on top, each in a different color with a lighter top face and two shaded side faces, plus a soft shadow on the ground.",
+    "canvas": { "width": 600, "height": 600 }
+  },
+  {
+    "id": "iso-house",
+    "category": "isometric",
+    "brief": "A small isometric house on a square green ground tile: walls with a door and two windows, a pitched red roof, a chimney, and a short path leading to the door. Consistent isometric angles and shading on every face.",
+    "canvas": { "width": 800, "height": 600 }
+  },
+  {
+    "id": "arabic-greeting-card",
+    "category": "arabic-text",
+    "brief": "A greeting card with the Arabic text \"رمضان كريم\" in large letters at the center, above it a golden crescent moon and a hanging lantern on each side, on a deep green background with a few small stars.",
+    "canvas": { "width": 800, "height": 500 }
+  },
+  {
+    "id": "arabic-cafe-sign",
+    "category": "arabic-text",
+    "brief": "A cafe sign: a rounded rectangular board with the Arabic name \"مقهى الياسمين\" in large letters, the smaller Arabic line \"منذ ١٩٩٥\" below it, and a steaming coffee cup with a jasmine flower beside the name.",
+    "canvas": { "width": 600, "height": 400 }
+  },
+  {
+    "id": "arabic-poster-reading",
+    "category": "arabic-text",
+    "brief": "A reading-campaign poster with the Arabic headline \"القراءة نور\" in large letters at the top and the line \"معرض الكتاب السنوي\" below it. Under the text an open book with light rays rising from its pages, on a warm background.",
+    "canvas": { "width": 600, "height": 900 }
+  }
+]
