@@ -1,15 +1,20 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { exportSvg, rasterize, validateDocument } from '@agent-illustrator/engine';
 import type { Client } from '@modelcontextprotocol/client';
 import { z } from 'zod';
-import { connectServer } from './mcp.ts';
+import { claudeCodeClient, type ClientInput, type ClientResult, type ClientRunner } from './clients.ts';
+import { assertServerBuilt, connectServer, serverEnv } from './mcp.ts';
 import { errorText, OpenAICompatibleModel, toToolSpec, type AssistantMessage, type ChatMessage, type ChatModel, type ImagePart, type ToolCall, type Usage } from './model.ts';
-import { PATHS } from './paths.ts';
-import { briefPrompt, runRaw } from './raw-svg.ts';
+import { FONTS, PATHS } from './paths.ts';
+import { briefPrompt, RAW_SYSTEM, rawPrompt, runRaw, svgFromReply, type SvgReply } from './raw-svg.ts';
 
-const USAGE = 'usage: node eval/src/run.ts --model <id> [--briefs a,b] [--mode tools|raw|both] [--max-turns 40] [--no-vision] [--run-id <id>]';
+const USAGE =
+  'usage: node eval/src/run.ts [--client claude-code|api] [--model <id>] [--briefs a,b] [--mode tools|raw|both] [--timeout <seconds>] [--max-turns 40] [--no-vision] [--run-id <id>]\n' +
+  '--model is required for --client api and optional for claude-code; --timeout applies to claude-code, --max-turns and --no-vision to api.';
 
 export const BriefSchema = z.strictObject({
   id: z.string().regex(/^[a-z0-9-]+$/),
@@ -28,13 +33,24 @@ export type Metrics = {
   opsApplied: number;
   promptTokens: number;
   completionTokens: number;
+  /** What the CLI reported for the run (Claude Code only); an estimate on a subscription, which is not billed per token. */
+  costUsd?: number;
   ms: number;
   /** Tools mode: the model ended with a reply, not a tool call or the turn limit, and a document exists. Raw mode: the reply held an SVG that rendered. */
   finished: boolean;
   error?: string;
 };
 /** `metrics.json` of one brief. */
-export type BriefMetrics = { brief: string; category: string; prompt: string; tools?: Metrics; raw?: Metrics };
+export type BriefMetrics = {
+  brief: string;
+  category: string;
+  prompt: string;
+  /** Which client ran the brief and with which model; absent from runs through the OpenAI-compatible API. */
+  client?: ClientRunner['name'];
+  model?: string;
+  tools?: Metrics;
+  raw?: Metrics;
+};
 export type Mode = 'tools' | 'raw' | 'both';
 export type RunOptions = {
   /** Directory for this brief's files. */
@@ -215,15 +231,134 @@ export async function runBrief(model: ChatModel, brief: Brief, opts: RunOptions)
   return result;
 }
 
+// --- Runs through a subscription CLI (Claude Code) ---
+
+export type CliRunOptions = {
+  /** Directory for this brief's files. */
+  outDir: string;
+  mode?: Mode;
+  /** The CLI's own model name or alias; default the CLI's default. */
+  model?: string;
+  timeoutMs?: number;
+};
+
+const DEFAULT_TIMEOUT_MS = 10 * 60_000;
+
+const toolsPrompt = (b: Brief): string =>
+  `${briefPrompt(b)}\n\nUse only the agent-illustrator tools. When done, call document_io {"action": "save", "doc_id": <your document's id>, "name": "final"}.`;
+
+const opCount = (args: unknown): number => {
+  const ops = (args as { ops?: unknown } | null)?.ops;
+  return Array.isArray(ops) ? ops.length : 0;
+};
+
+/**
+ * What a CLI run counts as. `opsApplied` is the ops sent in `apply_ops` calls that did not error: a CLI does not show whether the server committed them.
+ * `finished` is for the caller to set.
+ */
+function cliMetrics(r: ClientResult): Metrics {
+  const m = newMetrics();
+  m.turns = r.turns;
+  m.toolCalls = r.toolCalls.length;
+  m.toolErrors = r.toolCalls.filter((c) => !c.ok).length;
+  m.opsApplied = r.toolCalls.filter((c) => c.name === 'apply_ops' && c.ok).reduce((n, c) => n + opCount(c.args), 0);
+  m.promptTokens = r.usage?.inputTokens ?? 0;
+  m.completionTokens = r.usage?.outputTokens ?? 0;
+  if (r.usage?.costUsd !== undefined) m.costUsd = r.usage.costUsd;
+  m.ms = r.ms;
+  return m;
+}
+
+/** The document the model saved as "final", exported and rendered by the engine; or why there is none. */
+function captureSaved(file: string): SvgReply {
+  if (!existsSync(file)) return { error: 'no document saved' };
+  try {
+    const doc = validateDocument(JSON.parse(readFileSync(file, 'utf8')));
+    return { svg: exportSvg(doc), png: rasterize(doc, { fonts: FONTS }).png };
+  } catch (e) {
+    return { error: `the saved document does not load: ${errorText(e)}` };
+  }
+}
+
+type CliCall = { client: ClientRunner; model?: string; timeoutMs: number };
+type CliModeResult = { metrics: Metrics; events: unknown[]; svg?: string; png?: Uint8Array };
+
+/** One CLI run in a fresh empty folder, so the model has nothing to read but what the server gives it. */
+async function runCli(call: CliCall, input: Pick<ClientInput, 'prompt' | 'mcp' | 'env'>): Promise<ClientResult> {
+  const cwd = mkdtempSync(join(tmpdir(), 'ai-eval-cwd-'));
+  try {
+    return await call.client.run({ ...input, ...(call.model ? { model: call.model } : {}), cwd, timeoutMs: call.timeoutMs });
+  } finally {
+    try {
+      rmSync(cwd, { recursive: true, force: true, maxRetries: 3 });
+    } catch {
+      // A temp folder the OS clears later; not worth failing a finished run for.
+    }
+  }
+}
+
+/** Tools mode through a CLI: the server's tools only; the model saves its document as "final" and the harness loads it. */
+async function runToolsCli(call: CliCall, brief: Brief, outDir: string): Promise<CliModeResult> {
+  assertServerBuilt();
+  const docs = join(outDir, 'docs');
+  rmSync(join(docs, 'final.json'), { force: true }); // a rerun into the same folder must not pass off an earlier document
+  const result = await runCli(call, { prompt: toolsPrompt(brief), mcp: true, env: serverEnv({ renderDir: join(outDir, 'renders'), docsDir: docs }) });
+  const { error: noDocument, ...drawing } = captureSaved(join(docs, 'final.json'));
+  const metrics = cliMetrics(result);
+  const error = [result.error, noDocument].filter(Boolean).join('; ');
+  if (error) metrics.error = error;
+  metrics.finished = !error;
+  return { metrics, events: result.rawEvents, ...drawing };
+}
+
+/** Raw mode through a CLI: no tools, one hand-written SVG in the reply. */
+async function runRawCli(call: CliCall, brief: Brief): Promise<CliModeResult> {
+  const result = await runCli(call, { prompt: `${RAW_SYSTEM}\n\n${rawPrompt(brief)}`, mcp: false, env: {} });
+  const { error: badReply, ...drawing } = svgFromReply(result.finalText, brief.canvas.width);
+  const metrics = cliMetrics(result);
+  const error = result.error ?? badReply;
+  if (error) metrics.error = error;
+  metrics.finished = !error;
+  return { metrics, events: result.rawEvents, ...drawing };
+}
+
+/** Runs one brief through a CLI in the chosen mode(s) and writes the same files as `runBrief`, with the CLI's events as the transcript and the saved documents in `docs/`. */
+export async function runBriefCli(client: ClientRunner, brief: Brief, opts: CliRunOptions): Promise<BriefMetrics> {
+  const { outDir, mode = 'both', model, timeoutMs = DEFAULT_TIMEOUT_MS } = opts;
+  mkdirSync(outDir, { recursive: true });
+  const call: CliCall = { client, timeoutMs, ...(model ? { model } : {}) };
+  const result: BriefMetrics = { brief: brief.id, category: brief.category, prompt: brief.brief, client: client.name, ...(model ? { model } : {}) };
+  const transcript: Partial<Record<'tools' | 'raw', unknown[]>> = {};
+  if (mode !== 'raw') {
+    const r = await runToolsCli(call, brief, outDir);
+    result.tools = r.metrics;
+    transcript.tools = r.events;
+    if (r.svg !== undefined) put(outDir, 'tools.svg', r.svg);
+    if (r.png) put(outDir, 'tools.png', r.png);
+  }
+  if (mode !== 'tools') {
+    const r = await runRawCli(call, brief);
+    result.raw = r.metrics;
+    transcript.raw = r.events;
+    if (r.svg !== undefined) put(outDir, 'raw.svg', r.svg);
+    if (r.png) put(outDir, 'raw.png', r.png);
+  }
+  put(outDir, 'transcript.json', JSON.stringify(transcript, null, 2));
+  put(outDir, 'metrics.json', JSON.stringify(result, null, 2));
+  return result;
+}
+
 const describe = (label: string, m?: Metrics): string =>
   m ? `${label} ${m.finished ? 'done' : 'unfinished'} (${m.turns} turns, ${m.toolCalls} calls, ${m.toolErrors} errors${m.error ? `; ${m.error.slice(0, 100)}` : ''})` : '';
 
 async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
+      client: { type: 'string', default: 'claude-code' },
       model: { type: 'string' },
       briefs: { type: 'string' },
       mode: { type: 'string', default: 'both' },
+      timeout: { type: 'string', default: String(DEFAULT_TIMEOUT_MS / 1000) },
       'max-turns': { type: 'string', default: '40' },
       'no-vision': { type: 'boolean', default: false },
       'run-id': { type: 'string' },
@@ -232,7 +367,11 @@ async function main(): Promise<void> {
   const fail: (message: string) => never = (message) => {
     throw new Error(`${message}\n${USAGE}`);
   };
-  if (!values.model) fail('--model is required');
+  const client = values.client;
+  if (client !== 'claude-code' && client !== 'api') fail(`--client must be claude-code or api, got "${client}"`);
+  if (client === 'api' && !values.model) fail('--model is required with --client api');
+  const timeoutSeconds = Number(values.timeout);
+  if (!(timeoutSeconds > 0)) fail(`--timeout must be a positive number of seconds, got "${values.timeout}"`);
   const mode = values.mode as Mode;
   if (!['tools', 'raw', 'both'].includes(mode)) fail(`--mode must be tools, raw or both, got "${values.mode}"`);
   const maxTurns = Number(values['max-turns']);
@@ -244,11 +383,15 @@ async function main(): Promise<void> {
   if (unknown.length > 0) fail(`unknown brief id(s): ${unknown.join(', ')}. Known: ${all.map((b) => b.id).join(', ')}`);
   const briefs = wanted ? all.filter((b) => wanted.includes(b.id)) : all;
 
-  const model = new OpenAICompatibleModel({ model: values.model });
+  const api = client === 'api' && values.model ? new OpenAICompatibleModel({ model: values.model }) : undefined;
+  const runner = claudeCodeClient();
   const runDir = join(PATHS.runs, values['run-id'] ?? new Date().toISOString().replace(/[-:]/g, '').slice(0, 15));
-  const slug = values.model.replace(/[^\w.-]+/g, '-');
+  const slug = `${client === 'api' ? '' : `${client}-`}${values.model ?? 'default'}`.replace(/[^\w.-]+/g, '-');
   for (const [i, brief] of briefs.entries()) {
-    const r = await runBrief(model, brief, { outDir: join(runDir, slug, brief.id), mode, maxTurns, vision: !values['no-vision'] });
+    const outDir = join(runDir, slug, brief.id);
+    const r = api
+      ? await runBrief(api, brief, { outDir, mode, maxTurns, vision: !values['no-vision'] })
+      : await runBriefCli(runner, brief, { outDir, mode, timeoutMs: timeoutSeconds * 1000, ...(values.model ? { model: values.model } : {}) });
     console.log(`[${i + 1}/${briefs.length}] ${brief.id}: ${[describe('tools', r.tools), describe('raw', r.raw)].filter(Boolean).join(' | ')}`);
   }
   console.log(`\nRun: ${runDir}\nReport: node eval/src/report.ts ${runDir}`);

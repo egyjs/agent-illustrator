@@ -13,19 +13,25 @@ export type Connection = {
   close: () => Promise<void>;
 };
 
+export function assertServerBuilt(): void {
+  if (!existsSync(PATHS.serverCli)) throw new Error(`the MCP server is not built (${PATHS.serverCli} is missing): run \`pnpm build\` first`);
+}
+
+/** The environment of the server process: the SDK's safe defaults, quiet logs, and the folders for render files (default a fresh temp dir) and saved documents (default the server's own). */
+export function serverEnv(options: { renderDir?: string; docsDir?: string } = {}): Record<string, string> {
+  return {
+    ...getDefaultEnvironment(),
+    AGENT_ILLUSTRATOR_LOG_LEVEL: 'warn',
+    AGENT_ILLUSTRATOR_RENDER_DIR: options.renderDir ?? mkdtempSync(join(tmpdir(), 'ai-eval-')),
+    ...(options.docsDir === undefined ? {} : { AGENT_ILLUSTRATOR_DOCS_DIR: options.docsDir }),
+  };
+}
+
 /** Starts the built server over stdio, as an MCP client would. `renderDir` receives the render fallback PNGs; default a fresh temp dir. */
 export async function connectServer(options: { renderDir?: string } = {}): Promise<Connection> {
-  if (!existsSync(PATHS.serverCli)) throw new Error(`the MCP server is not built (${PATHS.serverCli} is missing): run \`pnpm build\` first`);
+  assertServerBuilt();
   const client = new Client({ name: 'agent-illustrator-eval', version: '0.0.0' });
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [PATHS.serverCli],
-    env: {
-      ...getDefaultEnvironment(),
-      AGENT_ILLUSTRATOR_LOG_LEVEL: 'warn',
-      AGENT_ILLUSTRATOR_RENDER_DIR: options.renderDir ?? mkdtempSync(join(tmpdir(), 'ai-eval-')),
-    },
-  });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [PATHS.serverCli], env: serverEnv(options) });
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();

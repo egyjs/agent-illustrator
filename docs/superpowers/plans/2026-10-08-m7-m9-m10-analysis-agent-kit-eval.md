@@ -124,9 +124,11 @@
 - **Review** (Sonnet, 15 findings, most reproduced) and **fixes** (Sonnet): a resvg panic that killed the server on region renders with layered nodes (filter/mask/clip/opacity/blend) far from the crop, now pruned or rendered wider and cropped; `near_miss` noise (0.5 px alignment, neighbours only, bleeds ignored, capped; fixture issues 148 → 24); issue priority order; sibling and pair caps with `truncated`; per-user docs dir (0700, realpath checks, atomic lowercase saves); load limits and truncated echoes; `guide` topic cap; `describe_scene` 256 KB cap; eval no-doc runs marked unfinished and API keys redacted from errors; `$last` message; contrast on transparent canvases, with opacity, rechecked fixes and a 2 s budget; evicted sessions reported as `closed`.
 - **Totals:** 810 tests passing (1 POSIX-only skip) in 59 files; `pnpm check`, `pnpm build`, `pnpm smoke` green on Windows / Node 24.
 
-### Open owner actions (M9/M10 acceptance)
-1. Create the GitHub repo and push; the first CI run checks Linux (regression baselines were made on Windows; if pixel diffs exceed 0.5% there, regenerate with `pnpm --filter @agent-illustrator/eval baselines`).
-2. Run the harness on at least two model families (`eval/README.md`: `pnpm build`, set `EVAL_API_KEY` and optionally `EVAL_BASE_URL`, then `node eval/src/run.ts --model <id> --mode both` and `node eval/src/report.ts <run-dir>`), score with `eval/rubric.md`, and turn stuck points in transcripts into better error hints.
-3. A fresh-model session completing a brief with guides alone (M9 acceptance) is covered by the same runs.
+### Follow-up (2026-10-08)
+- Private repo `egyjs/agent-illustrator` created; first CI run green on ubuntu Node 22/24 and windows Node 24, including the Windows-made regression baselines.
+- **Owner ruling:** eval runs go through the client the owner already pays for, not API keys. `eval/src/clients.ts` drives Claude Code headless (`claude -p`, stream-json, only the server's tools, `ANTHROPIC_*`/`OPENAI_API_KEY` stripped so nothing bills the API); `--client api` stays optional. Codex was only an example and is not built. A Haiku smoke run of `landscape-sunset-lake` finished with 5 tool calls, 0 errors and a correct drawing.
+
+### Open owner action
+Run the 20 briefs through Claude Code on the subscription (`pnpm build`, then `node eval/src/run.ts --mode both`, then `node eval/src/report.ts <run-dir>`), score with `eval/rubric.md`, and turn stuck points in transcripts into better error hints. This also covers M9's "fresh model completes a brief with guides alone".
 
 Deferred items went to `post-v1-backlog.md` (undo-stack byte budget, nested-layer renders over `maxPixels` drawn flat).

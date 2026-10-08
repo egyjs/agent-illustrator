@@ -62,6 +62,7 @@ const METRIC_ROWS: [label: string, value: (m: Metrics) => string][] = [
   ['tool errors', (m) => String(m.toolErrors)],
   ['ops applied', (m) => String(m.opsApplied)],
   ['tokens in / out', (m) => `${m.promptTokens} / ${m.completionTokens}`],
+  ['cost (USD)', (m) => (m.costUsd === undefined ? '-' : m.costUsd.toFixed(3))],
   ['seconds', (m) => (m.ms / 1000).toFixed(1)],
 ];
 
@@ -108,11 +109,12 @@ function summarySection(entries: Entry[]): string {
         (sum((m) => m.turns) / ms.length).toFixed(1),
         String(sum((m) => m.toolErrors)),
         `${sum((m) => m.promptTokens)} / ${sum((m) => m.completionTokens)}`,
+        ms.some((m) => m.costUsd !== undefined) ? sum((m) => m.costUsd ?? 0).toFixed(2) : '-',
         (sum((m) => m.ms) / 1000).toFixed(0),
       ],
     ];
   });
-  return table(['mode', 'briefs', 'finished', 'mean turns', 'tool errors', 'tokens in / out', 'seconds'], rows, 'metrics');
+  return table(['mode', 'briefs', 'finished', 'mean turns', 'tool errors', 'tokens in / out', 'cost (USD)', 'seconds'], rows, 'metrics');
 }
 
 const CSS = `:root{color-scheme:light dark;--line:#8886}
@@ -137,7 +139,10 @@ export function buildReport(runDir: string): { html: string; template: ScoreTemp
   const sections = [...new Set(entries.map((e) => e.model))].map((model) => {
     const mine = entries.filter((e) => e.model === model);
     for (const { metrics } of mine) template.scores[`${model}/${metrics.brief}`] = Object.fromEntries(MODES.filter((m) => metrics[m.key]).map((m) => [m.key, blank()]));
-    return `<h2>${esc(model)}</h2>${summarySection(mine)}${mine.map((e) => briefSection(runDir, e)).join('\n')}`;
+    // Runs through a CLI say which client and model; older runs are known by their folder name.
+    const { client, model: cliModel } = mine[0]!.metrics;
+    const title = client ? `${client} · ${cliModel ?? 'default model'}` : model;
+    return `<h2>${esc(title)}</h2>${summarySection(mine)}${mine.map((e) => briefSection(runDir, e)).join('\n')}`;
   });
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
