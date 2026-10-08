@@ -2,7 +2,7 @@ import { formatHex, interpolate, parse, type Color } from 'culori';
 import { cosSinDeg } from '../geometry/transform.ts';
 import { defSvgId, resolveColor } from '../scene/color.ts';
 import type { Def, Doc, FilterDef, GradientStop, MaskFade } from '../scene/model.ts';
-import type { Fmt } from './svg.ts';
+import { formatter, type Fmt } from './svg.ts';
 
 /** The SVG id of a node's mask; node ids never start with "__". */
 export const maskSvgId = (id: string): string => `__mask_${id}`;
@@ -39,13 +39,19 @@ export function gradientStops(
   return list.map(({ offset, color }) => ({ offset, color: formatHex(color), opacity: color.alpha ?? 1 }));
 }
 
-/** x1 y1 x2 y2 attributes (bounding-box fractions) of a gradient line through the center at `angle` degrees: 0 runs left → right, 90 top → bottom. */
-function linearAttrs(angle: number, n: Fmt): string {
+/**
+ * x1 y1 x2 y2 attributes of a gradient line through the center of the bounding-box unit square at
+ * `angle` degrees: 0 runs left → right, 90 top → bottom. The line is long enough for the ramp to
+ * reach the box corners (at 45° it runs corner to corner). `f` formats the fractions.
+ */
+function linearAttrs(angle: number, f: Fmt): string {
   const [c, s] = cosSinDeg(angle);
-  return `x1="${n(0.5 - c / 2)}" y1="${n(0.5 - s / 2)}" x2="${n(0.5 + c / 2)}" y2="${n(0.5 + s / 2)}"`;
+  const h = (Math.abs(c) + Math.abs(s)) / 2;
+  return `x1="${f(0.5 - c * h)}" y1="${f(0.5 - s * h)}" x2="${f(0.5 + c * h)}" y2="${f(0.5 + s * h)}"`;
 }
 
 function filterMarkup(doc: Doc, id: string, def: FilterDef, n: Fmt): string {
+  const f = formatter(4);
   const parts: string[] = [];
   if (def.blur !== undefined && def.blur > 0) parts.push(`<feGaussianBlur in="SourceGraphic" stdDeviation="${n(def.blur)}" result="blur"/>`);
   if (def.shadow) {
@@ -53,21 +59,23 @@ function filterMarkup(doc: Doc, id: string, def: FilterDef, n: Fmt): string {
     const flood = parse(resolveColor(doc, color) ?? '') ?? NO_PAINT;
     const input = parts.length > 0 ? 'blur' : 'SourceGraphic';
     parts.push(
-      `<feDropShadow in="${input}" dx="${n(dx)}" dy="${n(dy)}" stdDeviation="${n(blur)}" flood-color="${formatHex(flood)}" flood-opacity="${n(flood.alpha ?? 1)}"/>`,
+      `<feDropShadow in="${input}" dx="${n(dx)}" dy="${n(dy)}" stdDeviation="${n(blur)}" flood-color="${formatHex(flood)}" flood-opacity="${f(flood.alpha ?? 1)}"/>`,
     );
   }
-  return `<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">${parts.join('')}</filter>`;
+  return `<filter id="${id}" x="-100%" y="-100%" width="300%" height="300%" color-interpolation-filters="sRGB">${parts.join('')}</filter>`;
 }
 
 function defMarkup(doc: Doc, name: string, def: Def, n: Fmt): string {
   const id = defSvgId(name);
   if (def.kind === 'filter') return filterMarkup(doc, id, def, n);
+  // Offsets, opacities and bounding-box fractions are unitless: they keep four decimals whatever the coordinate precision.
+  const f = formatter(4);
   const stops = gradientStops(def.stops, (c) => resolveColor(doc, c))
-    .map((s) => `<stop offset="${n(s.offset)}" stop-color="${s.color}"${s.opacity < 1 ? ` stop-opacity="${n(s.opacity)}"` : ''}/>`)
+    .map((s) => `<stop offset="${f(s.offset)}" stop-color="${s.color}"${s.opacity < 1 ? ` stop-opacity="${f(s.opacity)}"` : ''}/>`)
     .join('');
-  if (def.kind === 'linear') return `<linearGradient id="${id}" ${linearAttrs(def.angle, n)}>${stops}</linearGradient>`;
-  const focal = def.focal ? ` fx="${n(def.focal[0])}" fy="${n(def.focal[1])}"` : '';
-  return `<radialGradient id="${id}" cx="${n(def.center[0])}" cy="${n(def.center[1])}" r="${n(def.radius)}"${focal}>${stops}</radialGradient>`;
+  if (def.kind === 'linear') return `<linearGradient id="${id}" ${linearAttrs(def.angle, f)}>${stops}</linearGradient>`;
+  const focal = def.focal ? ` fx="${f(def.focal[0])}" fy="${f(def.focal[1])}"` : '';
+  return `<radialGradient id="${id}" cx="${f(def.center[0])}" cy="${f(def.center[1])}" r="${f(def.radius)}"${focal}>${stops}</radialGradient>`;
 }
 
 /**
@@ -95,13 +103,14 @@ export function defsMarkup(doc: Doc, n: Fmt): string {
  * The `<mask>` for a node's opacity fade. Its gradient is in bounding-box fractions, and the mask
  * reaches 50% past the box on every side so strokes and shadows outside the box are not cut.
  */
-export function maskMarkup(id: string, mask: MaskFade, n: Fmt): string {
+export function maskMarkup(id: string, mask: MaskFade): string {
+  const f = formatter(4);
   const gid = `__maskg_${id}`;
-  const stops = `<stop offset="0" stop-color="#ffffff" stop-opacity="${n(mask.from)}"/><stop offset="1" stop-color="#ffffff" stop-opacity="${n(mask.to)}"/>`;
+  const stops = `<stop offset="0" stop-color="#ffffff" stop-opacity="${f(mask.from)}"/><stop offset="1" stop-color="#ffffff" stop-opacity="${f(mask.to)}"/>`;
   const gradient =
     mask.type === 'radial'
       ? `<radialGradient id="${gid}" gradientUnits="userSpaceOnUse" cx="0.5" cy="0.5" r="0.5">${stops}</radialGradient>`
-      : `<linearGradient id="${gid}" gradientUnits="userSpaceOnUse" ${linearAttrs(mask.angle, n)}>${stops}</linearGradient>`;
+      : `<linearGradient id="${gid}" gradientUnits="userSpaceOnUse" ${linearAttrs(mask.angle, f)}>${stops}</linearGradient>`;
   return (
     `<mask id="${maskSvgId(id)}" maskContentUnits="objectBoundingBox" x="-50%" y="-50%" width="200%" height="200%">${gradient}` +
     `<rect x="-0.5" y="-0.5" width="2" height="2" fill="url(#${gid})"/></mask>`

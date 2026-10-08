@@ -106,3 +106,22 @@ Use `random/rng.ts` (`rngFor`, `noise2D`), `geometry/paths.ts` (`smooth(points, 
 2. Acceptance tests `test/acceptance-m5.test.ts`, `-m6`, `-m8` (one scene each through `createRegistry`, determinism, `validateDocument` round trip, render without error).
 3. Full `pnpm check`, `pnpm build`, `pnpm smoke`; one review pass; fixes.
 4. Docs: spec A3 refinements (decisions above), roadmap rows, this file's execution record.
+
+---
+
+## Execution record (2026-10-08)
+- **Foundation** `f008ff6` (orchestrator), plan `6b156cd`.
+- **Wave 1**, five Sonnet agents in parallel, disjoint files, no conflicts: A color `a8e900d` (28 tests), B paint defs `90b70e4` (45), C blob/wave/roughen `d1f5168` (24), D scatter/repeat/array `be18637` (38), E text `7e46b28` (40). Wiring `2601aa1`.
+- **Wave 2:** acceptance scenes M5/M6/M8 + MCP `apply_ops` text/data test `b9b1611` (37 tests). Scatter of 2000 copies in a 4000² region: about 260 ms.
+- **Review** (one Sonnet reviewer, 12 findings, 11 reproduced) and **fixes** (one Sonnet agent): textPath ids kept by `stripIds`; lengths capped at `MAX_COORD = 1e7` and non-finite geometry rejected; `zero_extent` warning for bbox-unit paints on flat shapes; `repeat_along_path` offsets wrap on loops and out-of-range positions drop with `out_of_range`; `ungroup` refuses groups with mask/filter/blend; linear gradients run corner to corner; no `direction` attribute (browsers flip anchors, resvg does not); roughen segment cap per op; filter region ±100%; unitless numbers and opacities keep 4 decimals at any export precision (SVGO `floatPrecision ≥ 3`); `validateDocument` shares the text content rules.
+- **Totals:** 571 tests in 49 files; `pnpm check`, `pnpm build`, `pnpm smoke` green on Windows / Node 24.
+
+### Deviations from the briefs
+- `wave` has no `seed` (no randomness). Copy generators leave the source in place when they make zero copies. `max_count` above `maxGenerated` fails up front. `tokens` stores values as written (hex only in `data`). `text` rejects control characters and lone surrogates (resvg throws on them). RTL anchoring is physical: `anchor: 'end'` puts the right edge of Arabic text at `x`.
+
+### Deferred (known limits)
+- Scatter `within` tests each candidate with an O(edges) winding number: a 10k-segment shape with 2000 points takes about 4 s. Add an edge index if real scenes hit it.
+- Gradient angles are measured in the box's unit square, so isolines skew on non-square boxes (CSS-style angles would need per-node `userSpaceOnUse` defs).
+- Filters still clip a blur or shadow that reaches more than one box size past the shape.
+- Unknown font families fall back to Tajawal silently (`RasterFonts` carries no family list).
+- Text measured without bundled fonts loads system fonts on every call (slow); the server always passes its fonts.

@@ -264,6 +264,49 @@ describe('ops/repeat repeat_along_path', () => {
     expect(r.doc.nodes.tie).toBeDefined();
   });
 
+  describe('closed outline offsets', () => {
+    const square = { op: 'rect', id: 'sq', x: 0, y: 0, width: 100, height: 100 };
+    const along = (extra: object) => run([square, tie, { op: 'repeat_along_path', id: 'g', source: 'tie', path: 'sq', align: false, ...extra }]);
+
+    it('a negative offset turns modulo the length instead of clamping or dropping', () => {
+      const r = along({ spacing: 100, offset: -100 });
+      expect(r.results[2]).toMatchObject({ status: 'ok', warnings: [] });
+      expectPoints(centers(r, 'g'), [[0, 100], [0, 0], [100, 0], [100, 100]]);
+      expectPoints(centers(along({ count: 4, offset: -100 }), 'g'), [[0, 100], [0, 0], [100, 0], [100, 100]]);
+    });
+
+    it('an offset past the length wraps around', () => {
+      expectPoints(centers(along({ spacing: 100, offset: 500 }), 'g'), [[100, 0], [100, 100], [0, 100], [0, 0]]);
+      expectPoints(centers(along({ count: 4, offset: 500 }), 'g'), [[100, 0], [100, 100], [0, 100], [0, 0]]);
+    });
+
+    it('spacing with an offset still covers the whole ring, with no copy doubled at the seam', () => {
+      const r = along({ spacing: 50, offset: 250 });
+      expect(r.results[2]).toMatchObject({ warnings: [] });
+      expectPoints(centers(r, 'g'), [[50, 100], [0, 100], [0, 50], [0, 0], [50, 0], [100, 0], [100, 50], [100, 100]]);
+      const ring = { op: 'ellipse', id: 'ring', cx: 300, cy: 300, rx: 100 };
+      const circle = run([ring, tie, { op: 'repeat_along_path', id: 'g', source: 'tie', path: 'ring', spacing: 100, offset: 300, align: false }]);
+      const pts = centers(circle, 'g');
+      expect(pts).toHaveLength(6);
+      for (const [x, y] of pts) expect(Math.hypot(x - 300, y - 300)).toBeCloseTo(100, 0);
+      for (const [i, [ax, ay]] of pts.entries()) for (const [bx, by] of pts.slice(i + 1)) expect(Math.hypot(ax - bx, ay - by)).toBeGreaterThan(50);
+    });
+  });
+
+  it('an open path skips positions beyond either end, says how many, and never piles copies on an end', () => {
+    const run1 = (extra: object) => run([rail, tie, { op: 'repeat_along_path', id: 'g', source: 'tie', path: 'rail', ...extra }]);
+    const spaced = run1({ spacing: 100, offset: -150 });
+    expect(spaced.results[2]).toMatchObject({ status: 'ok', warnings: [{ code: 'out_of_range', message: expect.stringContaining('2 of 6') }] });
+    expectPoints(centers(spaced, 'g'), [[150, 100], [250, 100], [350, 100], [450, 100]]);
+    const counted = run1({ count: 3, offset: -100 });
+    expect(counted.results[2]).toMatchObject({ warnings: [{ code: 'out_of_range', message: expect.stringContaining('1 of 3') }] });
+    expectPoints(centers(counted, 'g'), [[250, 100], [500, 100]]);
+    const none = run1({ count: 1, offset: 500 });
+    expect(none.results[2]).toMatchObject({ status: 'ok', warnings: [{ code: 'out_of_range' }, { code: 'empty_result' }] });
+    expect(none.doc.nodes.tie).toBeDefined();
+    expect(run1({ count: 5 }).results[2]).toMatchObject({ warnings: [] });
+  });
+
   it('rejects a guide that is not a path, a bad count/spacing pair, and a guide inside the source', () => {
     expect(run([rail, tie, { op: 'group', id: 'grp', ids: ['rail'] }, { op: 'repeat_along_path', source: 'tie', path: 'grp', count: 3 }]).results[3]).toMatchObject({ error: { code: 'invalid_structure' } });
     for (const call of [{}, { count: 3, spacing: 10 }, { spacing: 0 }, { spacing: -5 }]) {

@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { pathBounds } from '../../src/geometry/bezier.ts';
 import { signedArea } from '../../src/geometry/flatten.ts';
 import { rotate, scale, translate } from '../../src/geometry/transform.ts';
-import { anchorPoint, applyWorld, shapeOf, topmost } from '../../src/ops/common.ts';
+import type { Subpath } from '../../src/geometry/types.ts';
+import { addPath, anchorPoint, applyWorld, shapeOf, topmost } from '../../src/ops/common.ts';
 import { defineOp, executeBatch, Registry } from '../../src/ops/registry.ts';
 import type { Doc } from '../../src/scene/model.ts';
 import { worldBounds } from '../../src/scene/query.ts';
@@ -117,6 +118,19 @@ describe('ops/common', () => {
     );
     expect(ids).toEqual(['a', 'a-2']);
     expect(r.results[0]).toMatchObject({ warnings: [] });
+  });
+
+  it('addPath rejects geometry with a non-finite number and says the sizes were too large', () => {
+    const adding = (sp: Subpath) => probe((_, ctx) => ({ id: addPath(ctx, {}, { prefix: 'p', subpaths: [sp], source: {} }) }));
+    const ok = executeBatch(adding({ start: [0, 0], segs: [[0, 0, 5, 5, 10, 10]], closed: false }), docOf([]), [{ op: 'probe' }]);
+    expect(ok.ok).toBe(true);
+    for (const sp of [
+      { start: [Number.NaN, 0], segs: [], closed: false },
+      { start: [0, 0], segs: [[0, 0, 5, 5, Infinity, 10]], closed: false },
+    ] satisfies Subpath[]) {
+      const r = executeBatch(adding(sp), docOf([]), [{ op: 'probe' }]);
+      expect(r.results[0]).toMatchObject({ status: 'error', error: { code: 'invalid_input', hint: expect.stringContaining('too large') } });
+    }
   });
 
   it('a produce on a fresh doc still sees the moved transform (sanity for castDraft use)', () => {

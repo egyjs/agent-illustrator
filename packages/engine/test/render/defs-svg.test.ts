@@ -69,12 +69,20 @@ describe('render/defs-svg: defsMarkup', () => {
     const at = (angle: number) => toSvg(build([full, { op: 'gradient', id: 'g', stops: ['#000000', '#ffffff'], angle, ids: ['box'] }]));
     expect(at(0)).toContain('<linearGradient id="__def_g" x1="0" y1="0.5" x2="1" y2="0.5">');
     expect(at(90)).toContain('<linearGradient id="__def_g" x1="0.5" y1="0" x2="0.5" y2="1">');
-    expect(at(45)).toContain('x1="0.146" y1="0.146" x2="0.854" y2="0.854"');
     const svg = at(0);
     expect(svg).toContain('fill="url(#__def_g)"');
     expect(svg.match(/<stop /g)).toHaveLength(5);
     expect(svg).toContain('<stop offset="0" stop-color="#000000"/>');
     expect(svg).toContain('<stop offset="1" stop-color="#ffffff"/>');
+  });
+
+  it('stretches the ramp to the box corners, so a diagonal angle runs corner to corner', () => {
+    const vector = (angle: number) => toSvg(build([full, { op: 'gradient', id: 'g', stops: ['#000000', '#ffffff'], angle, ids: ['box'] }])).match(/x1="[^"]*" y1="[^"]*" x2="[^"]*" y2="[^"]*"/)![0];
+    expect(vector(45)).toBe('x1="0" y1="0" x2="1" y2="1"');
+    expect(vector(135)).toBe('x1="1" y1="0" x2="0" y2="1"');
+    expect(vector(180)).toBe('x1="1" y1="0.5" x2="0" y2="0.5"');
+    // 30°: half-length (cos + sin) / 2 = 0.683, so the line overshoots the box sides and the ramp still spans it.
+    expect(vector(30)).toBe('x1="-0.0915" y1="0.1585" x2="1.0915" y2="0.8415"');
   });
 
   it('emits radial gradients, with the focal point only when given', () => {
@@ -124,7 +132,7 @@ describe('render/defs-svg: defsMarkup', () => {
 
   it('emits blur, shadow and both as a filter chain', () => {
     const fx = (spec: object) => toSvg(build([full, { op: 'filter', id: 'f', ids: ['box'], ...spec }]));
-    const head = '<filter id="__def_f" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">';
+    const head = '<filter id="__def_f" x="-100%" y="-100%" width="300%" height="300%" color-interpolation-filters="sRGB">';
     expect(fx({ blur: 3 })).toContain(`${head}<feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/></filter>`);
     expect(fx({ shadow: { dx: 2, dy: 5, blur: 6, color: 'rgba(0,0,0,0.35)' } })).toContain(
       `${head}<feDropShadow in="SourceGraphic" dx="2" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.35"/></filter>`,
@@ -181,6 +189,26 @@ describe('render/defs-svg: export and round trip', () => {
     const refs = [...svg.matchAll(/url\(#([^)]+)\)/g)].map((m) => m[1]!);
     expect(refs.length).toBeGreaterThanOrEqual(4);
     for (const ref of refs) expect(svg).toContain(`id="${ref}"`);
+  });
+
+  it('keeps unitless fractions (offsets, vectors, radii, opacities) whatever the coordinate precision', () => {
+    const fractions = build([
+      full,
+      { op: 'gradient', id: 'lin', stops: ['#000000', 'rgba(255,255,255,0.4)'], angle: 30, ids: ['box'] },
+      { op: 'gradient', id: 'rad', type: 'radial', stops: ['#000', '#fff'], center: [0.25, 0.75], radius: 0.4, focal: [0.3, 0.2], ids: ['box'], target: 'stroke' },
+      { op: 'mask', id: 'box', fade: { angle: 30, from: 0.8, to: 0.2 } },
+    ]);
+    const raw = toSvg(fractions, { precision: 0 });
+    for (const piece of ['offset="0.25"', 'offset="0.75"', 'stop-opacity="0.4"', 'x1="-0.0915"', 'cx="0.25"', 'cy="0.75"', 'r="0.4"', 'fx="0.3"', 'stop-opacity="0.8"']) {
+      expect(raw, piece).toContain(piece);
+    }
+    // SVGO may drop the leading zero (".25") and keeps three decimals (-0.0915 → -0.092), but must not round a fraction to 0 or 1.
+    const out = exportSvg(fractions, { precision: 0 });
+    for (const piece of [/offset="0?\.25"/, /offset="0?\.75"/, /x1="-0?\.09\d"/, /cx="0?\.25"/, /cy="0?\.75"/, /r="0?\.4"/, /fx="0?\.3"/, /stop-opacity="0?\.8"/]) {
+      expect(out).toMatch(piece);
+    }
+    // Coordinates still follow the precision: a 100 × 50 canvas is unchanged, a fractional box would round.
+    expect(out).toContain('viewBox="0 0 100 50"');
   });
 
   it('survives a JSON round trip through validateDocument', () => {

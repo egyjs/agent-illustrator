@@ -80,6 +80,12 @@ describe('ops/generators: blob', () => {
     expect(run([{ ...BLOB, randomness: 1.5 }]).results[0]).toMatchObject({ status: 'error', error: { code: 'invalid_input' } });
     expect(run([{ ...BLOB, seed: 1.5 }]).results[0]).toMatchObject({ status: 'error', error: { code: 'invalid_input' } });
   });
+
+  it('rejects a center and radius too large to draw instead of producing non-finite geometry', () => {
+    const r = run([{ op: 'blob', cx: 1e308, cy: 300, radius: 1e308 }]);
+    expect(r.results[0]).toMatchObject({ status: 'error', error: { code: 'invalid_input' } });
+    expect(r.doc.root).toEqual([]);
+  });
 });
 
 describe('ops/generators: wave', () => {
@@ -220,6 +226,16 @@ describe('ops/generators: roughen', () => {
     expect(run([{ ...ROUGH, ids: ['nope'] }], base.doc).results[0]).toMatchObject({ error: { code: 'unknown_id' } });
     const flatDoc = docOf([groupNode('f', ['r'], { transform: [0, 0, 0, 0, 0, 0] }), pathNode('r', [polyline([[0, 0], [10, 0], [10, 10]], true)], { parent: 'f' })]);
     expect(run([{ op: 'roughen', ids: ['f'], amount: 1 }], flatDoc).results[0]).toMatchObject({ error: { code: 'invalid_structure' } });
+  });
+
+  it('counts the segments of every path in the op against one path\'s limit', () => {
+    const two = run([CARD, { ...CARD, id: 'card2' }]);
+    const limits = { limits: { maxSegmentsPerPath: 300 } };
+    expect(run([{ ...ROUGH, ids: ['card'] }], two.doc, limits).results[0]).toMatchObject({ status: 'ok' });
+    const both = run([{ ...ROUGH, ids: ['card', 'card2'] }], two.doc, limits);
+    expect(both.results[0]).toMatchObject({ status: 'error', error: { code: 'limit_exceeded', message: expect.stringContaining('2 path(s)') } });
+    expect(both.doc).toBe(two.doc);
+    expect(run([{ ...ROUGH, ids: ['card', 'card2'], detail: 12 }], two.doc, limits).results[0]).toMatchObject({ status: 'ok' });
   });
 
   it('leaves a zero-length path alone', () => {

@@ -59,6 +59,19 @@ describe('render/export', () => {
     expect(out).not.toContain('id="photo"');
   });
 
+  it.each([false, true])('stripIds keeps the id a text_on_path textPath points at with href (optimize: %s)', (optimize) => {
+    const r = executeBatch(registry, createDocument({ width: 400, height: 200, background: 'white' }), [
+      { op: 'path_commands', id: 'wave', d: 'M20 150 C 120 20, 280 20, 380 150' },
+      { op: 'text_on_path', id: 'caption', path: 'wave', content: 'Riding the wave', size: 24 },
+    ]);
+    expect(r.ok).toBe(true);
+    const out = exportSvg(r.doc, { stripIds: true, optimize });
+    const guide = out.match(/<textPath href="#([^"]+)"/)?.[1];
+    expect(guide).toBeDefined();
+    expect(out).toContain(`id="${guide}"`);
+    expect(out).not.toContain('id="caption"');
+  });
+
   it('rejects a precision outside 0..6', () => {
     expectCode(() => exportSvg(scene(), { precision: 7 }), 'invalid_input');
     expectCode(() => exportSvg(scene(), { precision: 1.5 }), 'invalid_input');

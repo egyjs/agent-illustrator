@@ -83,5 +83,6 @@ describe('ops: createRegistry', () => {
         expect(executeBatch(registry, createDocument({ width: 800, height: 600 }), example).ok).toBe(true);
       }
     }
-  });
+    // Text examples run without bundled fonts, so resvg loads the system fonts for each measurement.
+  }, 30_000);
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { polyline } from '../../src/geometry/paths.ts';
 import { IDENTITY } from '../../src/geometry/transform.ts';
-import { defineOp, executeBatch, Length, Registry, type OpOutcome } from '../../src/ops/registry.ts';
+import { defineOp, executeBatch, Length, MAX_COORD, Registry, type OpOutcome } from '../../src/ops/registry.ts';
 import { createDocument, type Doc } from '../../src/scene/model.ts';
 import { insertNode } from '../../src/scene/store.ts';
 import { expectCode, expectIntact } from '../fixtures.ts';
@@ -118,6 +118,15 @@ describe('ops/registry: executeBatch', () => {
   it('resolves percent lengths against the canvas', () => {
     const r = executeBatch(registry, fresh(), [{ op: 'box', x: '50%', y: '25%', size: 10 }]);
     expect(r.results[0]).toMatchObject({ bounds: { x: 400, y: 150, width: 10, height: 10 } });
+  });
+
+  it('rejects a length that is not finite or beyond MAX_COORD, as a number or an overflowing percent', () => {
+    expect(executeBatch(registry, fresh(), [{ op: 'box', x: MAX_COORD, y: -MAX_COORD, size: 5 }]).ok).toBe(true);
+    for (const x of [1e308, -1e308, MAX_COORD * 1.01, `${'9'.repeat(400)}%`, '99999999999%']) {
+      const r = executeBatch(registry, fresh(), [{ op: 'box', x, y: 0, size: 5 }]);
+      expect(r.ok, String(x).slice(0, 20)).toBe(false);
+      expect(r.results[0]).toMatchObject({ status: 'error', error: { code: 'invalid_input', hint: expect.stringContaining('canvas scale') } });
+    }
   });
 
   it('a dry run reports results without committing', () => {

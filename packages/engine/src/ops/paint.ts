@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { EngineError } from '../errors.ts';
 import { resolveColor, toSvgColor } from '../scene/color.ts';
 import { PaintSchema, type Def, type Style } from '../scene/model.ts';
+import { worldBounds } from '../scene/query.ts';
 import { IdInput, resolveIds } from './common.ts';
 import { defineOp, type OpContext } from './registry.ts';
 
@@ -47,13 +48,26 @@ function define(ctx: OpContext, name: string, def: Def, ids: readonly string[] |
   });
 }
 
+/** Smallest box side that bounding-box units can work with. */
+const MIN_EXTENT = 1e-9;
+
+/** Warns for each id whose box is flat: gradients, filters and masks measure in bounding-box units, so they draw nothing on it. */
+function warnZeroExtent(ctx: OpContext, ids: readonly string[], what: string): void {
+  for (const id of ids) {
+    const box = worldBounds(ctx.doc, id);
+    if (box && (box.width <= MIN_EXTENT || box.height <= MIN_EXTENT)) {
+      ctx.warn('zero_extent', `${what} on "${id}" renders nothing: bounding-box units need a non-zero width and height; use a stroke color instead, or give the shape some area`);
+    }
+  }
+}
+
 const Stop = z.union([PaintSchema, z.strictObject({ color: PaintSchema, offset: unit })]);
 
 export const gradient = defineOp({
   name: 'gradient',
   domain: 'style',
   description:
-    'Defines a linear or radial gradient and, with ids, paints it as their fill (or stroke). Stops are colors or token names, evenly spaced unless given as {color, offset}; offsets run 0..1 and must not decrease. Linear: angle 0 runs left to right, 90 top to bottom. Radial: center, radius and focal point are fractions of the painted shape\'s box. Colors blend through OKLab, so the ramp stays smooth.',
+    'Defines a linear or radial gradient and, with ids, paints it as their fill (or stroke). Stops are colors or token names, evenly spaced unless given as {color, offset}; offsets run 0..1 and must not decrease. Linear: the angle is in degrees, measured in the box\'s unit square (so 45 runs corner to corner); 0 runs left to right, 90 top to bottom. Radial: center, radius and focal point are fractions of the painted shape\'s box. Colors blend through OKLab, so the ramp stays smooth.',
   schema: z.strictObject({
     id: IdInput.optional(),
     type: z.enum(['linear', 'radial']).optional(),
@@ -94,6 +108,7 @@ export const gradient = defineOp({
         ? { kind: 'radial', center: input.center ?? [0.5, 0.5], radius: input.radius ?? 0.5, ...(input.focal ? { focal: input.focal } : {}), stops }
         : { kind: 'linear', angle: input.angle ?? 90, stops };
     define(ctx, name, def, ids, input.target ?? 'fill');
+    warnZeroExtent(ctx, ids ?? [], 'the gradient');
     return { ...(ids ? { ids } : {}), data: { def: name } };
   },
 });
@@ -132,6 +147,7 @@ export const filter = defineOp({
     const name = defName(ctx, input.id, 'filter');
     const ids = input.ids && resolveIds(ctx, input.ids);
     define(ctx, name, { kind: 'filter', ...(input.blur === undefined ? {} : { blur: input.blur }), ...(shadow ? { shadow } : {}) }, ids, 'filter');
+    warnZeroExtent(ctx, ids ?? [], 'the filter');
     return { ...(ids ? { ids } : {}), data: { def: name } };
   },
 });
@@ -140,7 +156,7 @@ export const mask = defineOp({
   name: 'mask',
   domain: 'style',
   description:
-    'Fades a node out with an opacity mask over its bounding box. fade.from is the opacity at the start of a linear fade (angle 0 = left, 90 = top) or at the center of a radial one; fade.to is the opacity at the other end or the rim. fade null removes the mask.',
+    'Fades a node out with an opacity mask over its bounding box. fade.from is the opacity at the start of a linear fade (angle 0 = left, 90 = top, measured in the box\'s unit square) or at the center of a radial one; fade.to is the opacity at the other end or the rim. fade null removes the mask.',
   schema: z.strictObject({
     id: z.string(),
     fade: z.strictObject({ type: z.enum(['linear', 'radial']).optional(), angle: z.number().optional(), from: unit.optional(), to: unit.optional() }).nullable(),
@@ -159,6 +175,7 @@ export const mask = defineOp({
       if (fade) target.mask = { type: fade.type ?? 'linear', angle: fade.angle ?? 90, from: fade.from ?? 1, to: fade.to ?? 0 };
       else delete target.mask;
     });
+    if (fade) warnZeroExtent(ctx, [node.id], 'the mask');
     return { id: node.id };
   },
 });

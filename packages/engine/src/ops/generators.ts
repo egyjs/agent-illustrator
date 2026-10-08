@@ -1,10 +1,10 @@
 import { castDraft } from 'immer';
 import { z } from 'zod';
 import { EngineError } from '../errors.ts';
-import { measure } from '../geometry/bezier.ts';
+import { measure, type SubpathMeasure } from '../geometry/bezier.ts';
 import { line, smooth } from '../geometry/paths.ts';
 import { applyToSubpaths, invert } from '../geometry/transform.ts';
-import type { Subpath, Vec2 } from '../geometry/types.ts';
+import type { Mat6, Subpath, Vec2 } from '../geometry/types.ts';
 import { noise2D, rngFor } from '../random/rng.ts';
 import type { PathNode } from '../scene/model.ts';
 import { subtreeIds, worldSubpaths, worldTransform } from '../scene/query.ts';
@@ -103,8 +103,19 @@ export const wave = defineOp({
   },
 });
 
-/** The roughened copy of a path's geometry, in the path's own coordinates. */
-function roughPath(ctx: OpContext, node: PathNode, amount: number, detail: number, seed: number): Subpath[] {
+/** What roughening one path needs, measured before any geometry is built. */
+type RoughPlan = {
+  readonly node: PathNode;
+  readonly inverse: Mat6;
+  readonly world: readonly Subpath[];
+  readonly measures: readonly SubpathMeasure[];
+  /** Points to sample per subpath; 0 leaves a subpath (too short to have a direction) as it is. */
+  readonly counts: readonly number[];
+  /** Segments the roughened path will have. */
+  readonly segments: number;
+};
+
+function planRough(ctx: OpContext, node: PathNode, detail: number): RoughPlan {
   const inverse = invert(worldTransform(ctx.doc, node.id));
   if (!inverse) {
     throw new EngineError('invalid_structure', `"${node.id}" sits in a group squashed flat (scale 0)`, 'Give that group a non-zero scale before roughening.');
@@ -113,13 +124,11 @@ function roughPath(ctx: OpContext, node: PathNode, amount: number, detail: numbe
   const measures = world.map((sp) => measure(sp));
   const counts = measures.map((m, i) => (m.length > MIN_LENGTH ? Math.max(world[i]!.closed ? 3 : 2, Math.round(m.length / detail)) : 0));
   const segments = counts.reduce((total, n, i) => total + (n === 0 ? node.subpaths[i]!.segs.length : world[i]!.closed ? n : n - 1), 0);
-  if (segments > ctx.limits.maxSegmentsPerPath) {
-    throw new EngineError(
-      'limit_exceeded',
-      `roughening "${node.id}" would make ${segments} segments; the limit is ${ctx.limits.maxSegmentsPerPath}`,
-      `Use a larger detail (now ${detail}) so fewer points are sampled along the outline.`,
-    );
-  }
+  return { node, inverse, world, measures, counts, segments };
+}
+
+/** The roughened copy of a path's geometry, in the path's own coordinates. */
+function roughPath({ node, inverse, world, measures, counts }: RoughPlan, amount: number, detail: number, seed: number): Subpath[] {
   const noise = noise2D(rngFor(seed, node.id, 'roughen'));
   return world.map((sp, i) => {
     const n = counts[i]!;
@@ -152,13 +161,23 @@ export const roughen = defineOp({
     const amount = positive('roughen', 'amount', ctx.len(input.amount, 'min'));
     const detail = positive('roughen', 'detail', ctx.len(input.detail ?? 6, 'min'));
     const seed = input.seed ?? ctx.doc.seed;
-    const changed = new Map<string, Subpath[]>();
+    const plans: RoughPlan[] = [];
     let texts = 0;
     for (const id of new Set(resolveIds(ctx, input.ids).flatMap((root) => subtreeIds(ctx.doc, root)))) {
       const node = ctx.node(id);
       if (node.type === 'text') texts++;
-      else if (node.type === 'path') changed.set(id, roughPath(ctx, node, amount, detail, seed));
+      else if (node.type === 'path') plans.push(planRough(ctx, node, detail));
     }
+    // Everything one op processes must fit one path's limit, as with booleans.
+    const segments = plans.reduce((total, p) => total + p.segments, 0);
+    if (segments > ctx.limits.maxSegmentsPerPath) {
+      throw new EngineError(
+        'limit_exceeded',
+        `roughening ${plans.length} path(s) would make ${segments} segments; the limit is ${ctx.limits.maxSegmentsPerPath}`,
+        `Use a larger detail (now ${detail}) so fewer points are sampled along the outlines, or rough fewer paths per op.`,
+      );
+    }
+    const changed = new Map(plans.map((p) => [p.node.id, roughPath(p, amount, detail, seed)] as const));
     ctx.update((d) => {
       for (const [id, subpaths] of changed) (d.nodes[id] as { subpaths: unknown }).subpaths = castDraft(subpaths);
     });

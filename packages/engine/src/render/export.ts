@@ -5,9 +5,9 @@ import { toSvg } from './svg.ts';
 
 export type ExportOptions = { readonly precision?: number; readonly optimize?: boolean; readonly stripIds?: boolean };
 
-/** Drops every id except those a `url(#…)` points at (clipPaths), which would otherwise leave the clip dangling. */
+/** Drops every id except those a `url(#…)` or `href="#…"` points at (clips, masks, gradients, text guides), which would otherwise dangle. */
 function stripUnreferencedIds(svg: string): string {
-  const referenced = new Set([...svg.matchAll(/url\(#([^)]*)\)/g)].map((m) => m[1]));
+  const referenced = new Set([...svg.matchAll(/url\(#([^)]*)\)|href="#([^"]*)"/g)].map((m) => m[1] ?? m[2]));
   return svg.replace(/ id="([^"]*)"/g, (attr, id: string) => (referenced.has(id) ? attr : ''));
 }
 
@@ -24,5 +24,6 @@ export function exportSvg(doc: Doc, options: ExportOptions = {}): string {
   if (options.optimize === false) return options.stripIds ? stripUnreferencedIds(raw) : raw;
   const overrides: { collapseGroups: false; cleanupIds?: false } = { collapseGroups: false };
   if (!options.stripIds) overrides.cleanupIds = false;
-  return optimize(raw, { multipass: true, floatPrecision: precision, plugins: [{ name: 'preset-default', params: { overrides } }] }).data;
+  // toSvg already rounded the coordinates; SVGO's own rounding would also hit unitless fractions (stop offsets, gradient vectors).
+  return optimize(raw, { multipass: true, floatPrecision: Math.max(precision, 3), plugins: [{ name: 'preset-default', params: { overrides } }] }).data;
 }

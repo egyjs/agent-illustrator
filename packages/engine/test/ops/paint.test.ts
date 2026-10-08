@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { filter, gradient, mask } from '../../src/ops/paint.ts';
 import { executeBatch, Registry, type BatchResult } from '../../src/ops/registry.ts';
-import { ellipse, rect } from '../../src/ops/shapes.ts';
+import { ellipse, line, rect } from '../../src/ops/shapes.ts';
 import { style } from '../../src/ops/style.ts';
 import { createDocument, validateDocument, type Doc } from '../../src/scene/model.ts';
 import { expectIntact } from '../fixtures.ts';
 
-const registry = new Registry().register(rect, ellipse, style, gradient, filter, mask);
+const registry = new Registry().register(rect, ellipse, line, style, gradient, filter, mask);
 const doc = (tokens: Record<string, string> = {}): Doc => ({ ...createDocument({ width: 800, height: 600 }), tokens });
 function run(ops: unknown[], start: Doc = doc()): BatchResult {
   const r = executeBatch(registry, start, ops);
@@ -160,6 +160,29 @@ describe('ops/paint: mask', () => {
     expect(run([box, { op: 'mask', id: '$last', fade: {} }]).doc.nodes.box!.mask).toBeDefined();
     expect(error(run([{ op: 'mask', id: 'nope', fade: {} }]), 0)).toMatchObject({ code: 'unknown_id' });
     expect(error(run([box, { op: 'mask', id: 'box', fade: { from: 1.5 } }]), 1)).toMatchObject({ code: 'invalid_input' });
+  });
+});
+
+describe('ops/paint: zero-extent targets', () => {
+  const rule = { op: 'line', id: 'rule', x1: 10, y1: 40, x2: 200, y2: 40, style: { stroke: '#000000' } };
+  const warned = (r: BatchResult, i: number) => {
+    const o = r.results[i]!;
+    return o.status === 'ok' ? o.warnings : [];
+  };
+
+  it.each([
+    ['gradient', { op: 'gradient', id: 'g', stops: ['#000', '#fff'], ids: ['rule'], target: 'stroke' }],
+    ['filter', { op: 'filter', id: 'f', blur: 2, ids: ['rule'] }],
+    ['mask', { op: 'mask', id: 'rule', fade: { angle: 0 } }],
+  ])('a %s on a horizontal line warns that it renders nothing, and still applies', (_, call) => {
+    const r = run([rule, call]);
+    expect(warned(r, 1)).toEqual([{ code: 'zero_extent', message: expect.stringMatching(/"rule" renders nothing.*non-zero width and height.*stroke color.*some area/) }]);
+  });
+
+  it('stays quiet for a shape with area, and when the mask is removed', () => {
+    const r = run([box, { op: 'gradient', id: 'g', stops: ['#000', '#fff'], ids: ['box'] }, { op: 'filter', blur: 2, ids: ['box'] }, { op: 'mask', id: 'box', fade: {} }]);
+    for (const i of [1, 2, 3]) expect(warned(r, i)).toEqual([]);
+    expect(warned(run([rule, { op: 'mask', id: 'rule', fade: null }]), 1)).toEqual([]);
   });
 });
 

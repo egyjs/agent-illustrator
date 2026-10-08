@@ -57,7 +57,7 @@ function element(doc: Doc, id: string, n: Fmt, fine: Fmt): string {
     attrs.push(`clip-path="url(#__clip_${node.id})"`);
   }
   if (node.mask) {
-    prefix += maskMarkup(node.id, node.mask, n);
+    prefix += maskMarkup(node.id, node.mask);
     attrs.push(`mask="url(#${maskSvgId(node.id)})"`);
   }
   attrs.push(...styleAttrs(doc, node.style, n));
@@ -101,15 +101,17 @@ function styleAttrs(doc: Doc, s: Style, n: Fmt): string[] {
     else if (name === 'fill') out.push('fill="none"');
   };
   paint('fill', s.fill);
-  if (s.fillOpacity !== undefined) out.push(`fill-opacity="${n(s.fillOpacity)}"`);
+  // Opacities are fractions, so they keep 4 decimals whatever the coordinate precision.
+  const u = formatter(4);
+  if (s.fillOpacity !== undefined) out.push(`fill-opacity="${u(s.fillOpacity)}"`);
   paint('stroke', s.stroke);
   if (s.strokeWidth !== undefined) out.push(`stroke-width="${n(s.strokeWidth)}"`);
   if (s.strokeCap !== undefined) out.push(`stroke-linecap="${s.strokeCap}"`);
   if (s.strokeJoin !== undefined) out.push(`stroke-linejoin="${s.strokeJoin}"`);
   if (s.strokeDash !== undefined && s.strokeDash.length > 0) out.push(`stroke-dasharray="${s.strokeDash.map(n).join(' ')}"`);
   if (s.miterLimit !== undefined) out.push(`stroke-miterlimit="${n(s.miterLimit)}"`);
-  if (s.strokeOpacity !== undefined) out.push(`stroke-opacity="${n(s.strokeOpacity)}"`);
-  if (s.opacity !== undefined) out.push(`opacity="${n(s.opacity)}"`);
+  if (s.strokeOpacity !== undefined) out.push(`stroke-opacity="${u(s.strokeOpacity)}"`);
+  if (s.opacity !== undefined) out.push(`opacity="${u(s.opacity)}"`);
   const filter = s.filter === undefined || !Object.hasOwn(doc.defs, s.filter) ? undefined : doc.defs[s.filter];
   if (filter?.kind === 'filter') out.push(`filter="url(#${defSvgId(s.filter!)})"`);
   if (s.blend !== undefined && s.blend !== 'normal') out.push(`style="mix-blend-mode:${s.blend}"`);

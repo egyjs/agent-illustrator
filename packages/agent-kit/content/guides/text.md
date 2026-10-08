@@ -23,7 +23,7 @@ Ops: `text` (point text), `text_on_path` (one line along a path), `set_text` (ed
 ## Arabic and right-to-left text
 - Shaping and measuring work: letters join and the bounds are correct.
 - `direction` defaults to `auto`: right-to-left when the first letter is Arabic or Hebrew, else left-to-right. Set `ltr` or `rtl` to force it.
-- The renderer ignores `direction` for layout, so the engine wraps right-to-left lines in an isolate. Anchoring is still physical: for Arabic use `anchor: "end"` to align the right edge at `x`.
+- The renderer ignores `direction` for layout, so the engine wraps right-to-left lines in an isolate and writes no `direction` attribute to the SVG. Anchoring is physical in every viewer: for Arabic use `anchor: "end"` to align the right edge at `x`.
 - Avoid `letter_spacing` on Arabic, since it breaks the joins. Lines that mix scripts are best effort; check the render.
 
 ## Limits

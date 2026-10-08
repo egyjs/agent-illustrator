@@ -192,7 +192,7 @@ const INHERITED: readonly (keyof Style)[] = ['fill', 'stroke', 'strokeWidth', 's
 export const ungroup = defineOp({
   name: 'ungroup',
   domain: 'structure',
-  description: 'Dissolves groups: their children move up into the group\'s place and keep their look (position, inherited style, opacity).',
+  description: 'Dissolves groups: their children move up into the group\'s place and keep their look (position, inherited style, opacity). A group with a clip, mask, filter or blend mode must lose it first, since the children cannot carry it.',
   schema: z.strictObject({ ids: z.array(z.string()).min(1).max(1000) }),
   examples: [
     [
@@ -208,6 +208,9 @@ export const ungroup = defineOp({
       const g = ctx.node(id);
       if (g.type !== 'group') throw new EngineError('invalid_structure', `"${id}" is not a group`, 'Ungroup works on groups only.');
       if (g.clip) throw new EngineError('invalid_structure', `"${id}" has a clip that would be lost`, 'Remove the clip first with {"op": "clip", "id": …, "shape": null}.');
+      if (g.mask) throw new EngineError('invalid_structure', `"${id}" has a mask that would be lost`, 'Remove the mask first with {"op": "mask", "id": …, "fade": null}.');
+      const lost = g.style.filter !== undefined ? 'filter' : g.style.blend !== undefined && g.style.blend !== 'normal' ? 'blend' : undefined;
+      if (lost) throw new EngineError('invalid_structure', `"${id}" has a ${lost} that would be lost`, `Remove the ${lost} first with {"op": "style", "ids": ["${id}"], "unset": ["${lost}"]}.`);
       const inherited: Record<string, unknown> = {};
       for (const k of INHERITED) if (g.style[k] !== undefined) inherited[k] = g.style[k];
       const kids = g.children.map((c) => requireNode(ctx.doc, c));

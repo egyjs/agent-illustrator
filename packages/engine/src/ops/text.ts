@@ -4,7 +4,7 @@ import { EngineError } from '../errors.ts';
 import { cubicLength } from '../geometry/bezier.ts';
 import type { Subpath } from '../geometry/types.ts';
 import { measureInk } from '../render/text-metrics.ts';
-import { FONT_FAMILY_PATTERN, type TextNode } from '../scene/model.ts';
+import { FONT_FAMILY_PATTERN, TextContentSchema, type TextNode } from '../scene/model.ts';
 import { worldSubpaths } from '../scene/query.ts';
 import { removeSubtree } from '../scene/store.ts';
 import { common, insertNew } from './common.ts';
@@ -13,15 +13,7 @@ import { defineOp, Length, type OpContext } from './registry.ts';
 const MAX_SIZE = 10_000;
 const WEIGHTS = { normal: 400, bold: 700 } as const;
 
-// XML 1.0 forbids control characters and lone surrogates; the renderer refuses to parse them.
-// eslint-disable-next-line no-control-regex -- matching them is the point
-const UNPRINTABLE = /[\u{0}-\u{8}\u{B}\u{C}\u{E}-\u{1F}\u{FFFE}\u{FFFF}]|\p{Cs}/u;
-const Content = z
-  .string()
-  .min(1)
-  .max(2000)
-  .refine((s) => /\S/.test(s), 'content needs at least one visible character')
-  .refine((s) => !UNPRINTABLE.test(s), 'content has control characters or unpaired surrogates; remove them (a line break is "\\n")');
+const Content = TextContentSchema;
 const Line = Content.refine((s) => !s.includes('\n'), 'text on a path is one line: remove the line breaks');
 
 const FontFields = {

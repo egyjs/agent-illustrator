@@ -115,6 +115,23 @@ describe('ops/ungroup', () => {
     ]);
     expect(clipped.results[7]).toMatchObject({ error: { code: 'invalid_structure' } });
   });
+
+  it('refuses a group whose mask, filter or blend mode its children could not carry, and works once it is removed', () => {
+    const grouped = [...four, { op: 'group', id: 'g', ids: ['a', 'b'] }];
+    const refused = (setup: unknown[], lost: string) => {
+      const r = run([...grouped, ...setup, { op: 'ungroup', ids: ['g'] }]);
+      const last = r.results.at(-1) as { status: string; error: { code: string; message: string; hint: string } };
+      expect(last).toMatchObject({ status: 'error', error: { code: 'invalid_structure', message: expect.stringContaining(lost) } });
+      return last.error.hint;
+    };
+    expect(refused([{ op: 'mask', id: 'g', fade: {} }], 'mask')).toContain('"fade": null');
+    expect(refused([{ op: 'filter', id: 'soft', blur: 3, ids: ['g'] }], 'filter')).toContain('"unset": ["filter"]');
+    expect(refused([{ op: 'style', ids: ['g'], style: { blend: 'multiply' } }], 'blend')).toContain('"unset": ["blend"]');
+    const normal = run([...grouped, { op: 'style', ids: ['g'], style: { blend: 'normal' } }, { op: 'ungroup', ids: ['g'] }]);
+    expect(normal.results.at(-1)).toMatchObject({ status: 'ok' });
+    const cleared = run([...grouped, { op: 'mask', id: 'g', fade: {} }, { op: 'mask', id: 'g', fade: null }, { op: 'ungroup', ids: ['g'] }]);
+    expect(cleared.results.at(-1)).toMatchObject({ status: 'ok' });
+  });
 });
 
 describe('ops/clip', () => {

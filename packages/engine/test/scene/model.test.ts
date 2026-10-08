@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createDocument, integrityProblem, isValidId, validateDocument } from '../../src/scene/model.ts';
+import { IDENTITY } from '../../src/geometry/transform.ts';
+import { createDocument, integrityProblem, isValidId, textContentProblem, validateDocument } from '../../src/scene/model.ts';
 import { docOf, expectCode, groupNode, pathNode } from '../fixtures.ts';
 import { square } from '../geometry/helpers.ts';
 
@@ -61,5 +62,38 @@ describe('scene/model: validateDocument', () => {
     ['a background that does not resolve', { ...valid, canvas: { width: 800, height: 600, background: 'palette.bg' } }],
   ])('rejects %s', (_, doc) => {
     expectCode(() => validateDocument(doc), 'invalid_document');
+  });
+
+  it('applies the text ops\' content rules to text nodes', () => {
+    const withText = (content: string) =>
+      docOf([
+        {
+          id: 't',
+          type: 'text',
+          parent: null,
+          transform: IDENTITY,
+          style: {},
+          content,
+          font: { family: 'Tajawal', size: 24, weight: 400, letterSpacing: 0 },
+          anchor: 'start',
+          direction: 'ltr',
+          lineHeight: 1.2,
+          at: { kind: 'point', x: 0, y: 0 },
+          ink: null,
+        },
+      ]);
+    expect(validateDocument(JSON.parse(JSON.stringify(withText('Line one\nمرحبا')))).nodes.t).toMatchObject({ content: 'Line one\nمرحبا' });
+    for (const bad of ['a\u0000b', '   ', 'lone \ud800 surrogate']) {
+      expectCode(() => validateDocument(JSON.parse(JSON.stringify(withText(bad)))), 'invalid_document');
+    }
+  });
+});
+
+describe('scene/model: textContentProblem', () => {
+  it('names the problem, or is null for drawable text', () => {
+    expect(textContentProblem('Hello\nworld')).toBeNull();
+    expect(textContentProblem(' \n\t ')).toContain('visible');
+    expect(textContentProblem('a\u0001')).toContain('control characters');
+    expect(textContentProblem('\ud800')).toContain('unpaired surrogates');
   });
 });

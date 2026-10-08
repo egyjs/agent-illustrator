@@ -40,11 +40,12 @@ describe('render/text-svg', () => {
     expect(textMarkup(textNode(), n)).toEqual({ prefix: '', attrs: ['x="10"', 'y="70"', 'font-family="Tajawal"', 'font-size="40"'], body: 'Hello' });
   });
 
-  it('adds weight, letter spacing, anchor and direction in a fixed order', () => {
+  it('adds weight, letter spacing and anchor in a fixed order, and never a direction attribute', () => {
     const node = textNode({ font: { family: 'Tajawal', size: 12.5, weight: 700, letterSpacing: -1 }, anchor: 'middle', direction: 'rtl' });
     expect(textMarkup(node, n).attrs).toEqual([
-      'x="10"', 'y="70"', 'font-family="Tajawal"', 'font-size="12.5"', 'font-weight="700"', 'letter-spacing="-1"', 'text-anchor="middle"', 'direction="rtl"',
+      'x="10"', 'y="70"', 'font-family="Tajawal"', 'font-size="12.5"', 'font-weight="700"', 'letter-spacing="-1"', 'text-anchor="middle"',
     ]);
+    expect(toSvg(docOf([textNode({ direction: 'rtl' })]))).not.toContain('direction=');
   });
 
   it('escapes & < > and quotes in the content and the family', () => {

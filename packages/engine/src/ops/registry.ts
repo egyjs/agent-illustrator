@@ -12,6 +12,8 @@ export const Length = z.union([z.number(), z.string().regex(/^-?\d+(\.\d+)?%$/, 
 export type Length = z.output<typeof Length>;
 /** What a percent refers to: the canvas width, its height, or the smaller of the two. */
 export type Axis = 'x' | 'y' | 'min';
+/** Largest coordinate or length (canvas units) an op accepts; beyond it, geometry overflows to Infinity. */
+export const MAX_COORD = 1e7;
 
 export type Warning = { readonly code: string; readonly message: string };
 /** `data` carries results that are not nodes (token values, def names, text metrics) back to the caller. */
@@ -187,10 +189,13 @@ class Context implements OpContext {
   }
 
   len(v: Length, axis: Axis): number {
-    if (typeof v === 'number') return v;
     const { width, height } = this.doc.canvas;
     const ref = axis === 'x' ? width : axis === 'y' ? height : Math.min(width, height);
-    return (Number.parseFloat(v) / 100) * ref;
+    const out = typeof v === 'number' ? v : (Number.parseFloat(v) / 100) * ref;
+    if (!Number.isFinite(out) || Math.abs(out) > MAX_COORD) {
+      throw new EngineError('invalid_input', `${String(v).slice(0, 24)} is too large a length (limit ${MAX_COORD} canvas units)`, 'Use values at canvas scale: a few thousand units at most, or a percent such as "50%".');
+    }
+    return out;
   }
 
   style(s: Style | undefined): Style {

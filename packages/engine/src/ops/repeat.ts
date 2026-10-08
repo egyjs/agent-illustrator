@@ -201,7 +201,7 @@ export const repeatAlongPath = defineOp({
   domain: 'generators',
   description:
     'Places copies of `source` along the path `path` (it stays), centered on points at equal distances: `count` copies spread over the whole length (a closed outline wraps around), or one every `spacing` units. ' +
-    '`offset` shifts the start along the path. With `align` (default true) each copy turns to follow the path direction. Copies land in a new group; the source is removed unless `keep` is true.',
+    '`offset` shifts the start along the path: on a closed outline it wraps around, on an open path positions beyond either end are skipped (with a warning). With `align` (default true) each copy turns to follow the path direction. Copies land in a new group; the source is removed unless `keep` is true.',
   schema: z.strictObject({
     ...target,
     source: z.string(),
@@ -244,19 +244,23 @@ export const repeatAlongPath = defineOp({
     const loop = subpaths.length === 1 && subpaths[0]!.closed && length > 0;
 
     // Distances along the path, in order. The count is checked before the list is made.
+    // A single closed outline wraps: the offset turns modulo its length, and the end is the start, so no copy sits there twice.
+    const start = loop ? ((offset % length) + length) % length : offset;
     let n: number;
     if (input.count !== undefined) n = input.count;
-    else {
-      const span = length - offset;
-      // On a closed outline the end is the start, so a copy there would double up.
-      n = Math.max(0, loop ? Math.ceil((span - 1e-9) / spacing!) : Math.floor((span + 1e-9) / spacing!) + 1);
-    }
+    else if (loop) n = Math.floor(length / spacing! + 1e-9);
+    else n = Math.max(0, Math.floor((length - start + 1e-9) / spacing!) + 1);
     limitCopies(ctx, n);
-    const distances = Array.from({ length: n }, (_, i) => {
-      if (spacing !== undefined) return offset + i * spacing;
-      if (loop) return (((offset + (length * i) / n) % length) + length) % length;
-      return n === 1 ? offset : offset + ((length - offset) * i) / (n - 1);
+    const asked = Array.from({ length: n }, (_, i) => {
+      if (loop) return (start + (spacing === undefined ? (length * i) / n : i * spacing)) % length;
+      if (spacing !== undefined) return start + i * spacing;
+      return n === 1 ? start : start + ((length - start) * i) / (n - 1);
     });
+    // On an open path a distance outside [0, length] is no place on it: skip it rather than pile copies on an end.
+    const distances = asked.filter((s) => s >= -1e-9 && s <= length + 1e-9);
+    if (distances.length < asked.length) {
+      ctx.warn('out_of_range', `${asked.length - distances.length} of ${asked.length} positions fall outside the path (length ${Math.round(length * 100) / 100}, offset ${offset}) and were skipped`);
+    }
 
     const sampleAt = (s: number): PathSample => {
       let rest = Math.min(Math.max(s, 0), length);

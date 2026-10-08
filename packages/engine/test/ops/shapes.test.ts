@@ -35,6 +35,12 @@ describe('ops/shapes', () => {
     expect(run([{ op: 'rect', x: 0, y: 0, width: 5, height: 10, radius: -1 }]).results[0]).toMatchObject({ error: { code: 'invalid_input' } });
   });
 
+  it('rect: rejects a size too large to draw, with a canvas-scale hint', () => {
+    const r = run([{ op: 'rect', x: 0, y: 0, width: 1e308, height: 10 }]);
+    expect(r.results[0]).toMatchObject({ status: 'error', error: { code: 'invalid_input', hint: expect.stringContaining('canvas scale') } });
+    expect(r.doc.root).toEqual([]);
+  });
+
   it('ellipse: a circle by default, exact bounds', () => {
     const r = run([
       { op: 'ellipse', id: 'sun', cx: 100, cy: 100, rx: 50 },

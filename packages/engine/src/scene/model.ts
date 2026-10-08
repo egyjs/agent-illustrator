@@ -178,10 +178,28 @@ const PathSchema = z.strictObject({
   fillRule: z.enum(['nonzero', 'evenodd']),
   subpaths: z.array(SubpathSchema),
 });
+// XML 1.0 forbids control characters and lone surrogates; the renderer refuses to parse them.
+// eslint-disable-next-line no-control-regex -- matching them is the point
+const UNPRINTABLE = /[\u{0}-\u{8}\u{B}\u{C}\u{E}-\u{1F}\u{FFFE}\u{FFFF}]|\p{Cs}/u;
+
+/** Why this text cannot be drawn, or null when it can. The text ops and the document schema share it. */
+export function textContentProblem(s: string): string | null {
+  if (!/\S/.test(s)) return 'content needs at least one visible character';
+  if (UNPRINTABLE.test(s)) return 'content has control characters or unpaired surrogates; remove them (a line break is "\\n")';
+  return null;
+}
+
+/** Text content: 1..2000 characters that `textContentProblem` accepts. */
+export const TextContentSchema = z
+  .string()
+  .min(1)
+  .max(2000)
+  .refine((s) => textContentProblem(s) === null, { error: (issue) => textContentProblem(String(issue.input)) ?? undefined });
+
 const TextSchema = z.strictObject({
   ...nodeBase,
   type: z.literal('text'),
-  content: z.string().min(1).max(2000),
+  content: TextContentSchema,
   font: FontSchema,
   anchor: z.enum(['start', 'middle', 'end']),
   direction: z.enum(['ltr', 'rtl']),

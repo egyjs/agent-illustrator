@@ -66,6 +66,8 @@ const isIdentity = (m: Mat6) => m.every((v, i) => v === IDENTITY[i]);
 
 export const segmentCount = (subpaths: readonly Subpath[]): number => subpaths.reduce((n, sp) => n + sp.segs.length, 0);
 
+const isFiniteSubpath = (sp: Subpath): boolean => sp.start.every(Number.isFinite) && sp.segs.every((seg) => seg.every(Number.isFinite));
+
 /**
  * The transform that makes a new child of `parentId` land at the canvas coordinates of its geometry:
  * the inverse of the parent's world matrix (identity at the top level).
@@ -106,6 +108,9 @@ export function addPath(ctx: OpContext, input: Common, p: NewPath): string {
     p.prefix,
     ({ id, parent, transform, style }) => {
       const subpaths = typeof p.subpaths === 'function' ? p.subpaths(id) : p.subpaths;
+      if (!subpaths.every(isFiniteSubpath)) {
+        throw new EngineError('invalid_input', 'the shape has coordinates that are not finite numbers', 'Sizes were too large; use values at canvas scale (a few thousand units at most).');
+      }
       const segs = segmentCount(subpaths);
       if (segs > ctx.limits.maxSegmentsPerPath) {
         throw new EngineError('limit_exceeded', `${segs} segments in one path; the limit is ${ctx.limits.maxSegmentsPerPath}`, 'Use fewer points, or split the shape.');

@@ -230,6 +230,16 @@ describe('ops/text: text', () => {
       expect(error(r), `size ${size}`).toMatchObject({ code: 'invalid_input', hint: expect.stringContaining('font size') });
     }
   });
+
+  it('rejects a position or size too large to draw instead of storing non-finite numbers', () => {
+    const bad = (call: object) => run([{ op: 'text', content: 'Hi', x: 10, y: 50, ...call }]);
+    for (const call of [{ x: `${'9'.repeat(400)}%` }, { x: 1e308 }, { y: '99999999999%' }, { size: `${'9'.repeat(400)}%` }]) {
+      const r = bad(call);
+      expect(r.ok, JSON.stringify(call).slice(0, 40)).toBe(false);
+      expect(error(r).code).toBe('invalid_input');
+      expect(r.doc.root).toEqual([]);
+    }
+  });
 });
 
 describe('ops/text: text_on_path', () => {

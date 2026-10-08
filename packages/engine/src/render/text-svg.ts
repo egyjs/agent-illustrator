@@ -8,7 +8,8 @@ const ESCAPES: Readonly<Record<string, string>> = { '&': '&amp;', '<': '&lt;', '
 const escapeXml = (s: string): string => s.replace(/[&<>"]/g, (c) => ESCAPES[c]!);
 
 // resvg ignores `direction` for the paragraph base direction (spike F1), so right-to-left lines carry
-// an explicit isolate: RIGHT-TO-LEFT ISOLATE … POP DIRECTIONAL ISOLATE.
+// an explicit isolate: RIGHT-TO-LEFT ISOLATE … POP DIRECTIONAL ISOLATE. No `direction` attribute is
+// written: browsers would swap text-anchor start/end for it and resvg would not.
 const RLI = '\u{2067}';
 const PDI = '\u{2069}';
 
@@ -26,7 +27,6 @@ export function textMarkup(node: TextNode, n: Fmt): TextMarkup {
   if (font.weight !== 400) attrs.push(`font-weight="${font.weight}"`);
   if (font.letterSpacing !== 0) attrs.push(`letter-spacing="${n(font.letterSpacing)}"`);
   if (node.anchor !== 'start') attrs.push(`text-anchor="${node.anchor}"`);
-  if (node.direction === 'rtl') attrs.push('direction="rtl"');
   const line = (s: string): string => escapeXml(node.direction === 'rtl' ? `${RLI}${s}${PDI}` : s);
 
   if (at.kind === 'path') {
