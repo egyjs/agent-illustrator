@@ -56,7 +56,7 @@ links the spec decision it settles. The pre-M0 library check (spec "Outcomes rec
 - Result: Confirmed (S1 adopted), plus finding F4.
 
 ## R3: clients
-See `eval/clients.md`. Inspector CLI passes. Claude Desktop and Claude Code rows are pending the owner's run.
+See `eval/clients.md`. Inspector CLI, Claude Code 2.1.294 and Claude Desktop 1.4758.0 pass. In both Claude clients the model saw the PNG correctly and both schema styles accepted a valid op. Desktop also showed the image to the user.
 
 ## Summary (2026-10-08)
 - S1 (loose `apply_ops` schema): Confirmed. Advertise `additionalProperties: true` explicitly (F4).
@@ -66,6 +66,7 @@ See `eval/clients.md`. Inspector CLI passes. Claude Desktop and Claude Code rows
 - F3 (new): boolean results need `reorient(true, true)` before area/winding use (M1 paper-adapter).
 - F4 (new): loose item schema must spell `additionalProperties: true` (M3).
 - F5 (new, final review): paper constructors follow the last activated scope and scopes are never released. Use one long-lived scope plus `activate()` per call, not a scope per operation (M1).
-- Image delivery in real clients: pending `eval/clients.md` rows (decides how much M3 leans on the FR-11.2 disk fallback).
+- Image delivery in real clients: works in Claude Code and Claude Desktop (the model saw the image in both; Desktop also shows it in the UI). M3 keeps the FR-11.2 disk fallback as a fallback only.
+- Loose schema (S1) gives the model no per-op fields before the call. M3's `apply_ops` description must point at the `guide` op catalog (§2.6), and M9's catalog must list every op's fields. No new tool.
 - Linux confirmation: pending the first CI run.
 - Changes the M1–M3 plans must absorb: F3 and F5 (M1), F1 anchoring note (M8), F4 (M3).
