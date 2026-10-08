@@ -20,3 +20,18 @@ export function agentKitDir(moduleUrl: string = import.meta.url): string {
   }
   return found;
 }
+
+const FONT_FILES = ['Tajawal-Regular.ttf', 'Tajawal-Bold.ttf'] as const;
+
+/**
+ * Bundled fonts for rendering. Published: dist/fonts/ (copied by tsdown). Source: the engine's
+ * assets/fonts/ (dev and tests only). As with agentKitDir, a bundle never falls back to the workspace.
+ */
+export function fontFiles(moduleUrl: string = import.meta.url): { files: string[]; defaultFamily: string } {
+  const dirs = [new URL('./fonts/', moduleUrl)];
+  if (moduleUrl.endsWith('.ts')) dirs.push(new URL('../../engine/assets/fonts/', moduleUrl));
+  const paths = dirs.map((u) => fileURLToPath(u));
+  const dir = paths.find((d) => FONT_FILES.every((f) => existsSync(`${d}${f}`)));
+  if (dir === undefined) throw new Error(`bundled fonts not found; looked in: ${paths.join(', ')}`);
+  return { files: FONT_FILES.map((f) => `${dir}${f}`), defaultFamily: 'Tajawal' };
+}
