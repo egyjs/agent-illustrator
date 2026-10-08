@@ -8,14 +8,24 @@ export {
   createDocument,
   integrityProblem,
   validateDocument,
+  type BlendMode,
   type Canvas,
   type CreateDocumentInput,
+  type Def,
   type Doc,
+  type FilterDef,
+  type FontSpec,
+  type GradientStop,
   type GroupNode,
+  type LinearGradientDef,
+  type MaskFade,
   type PathNode,
+  type RadialGradientDef,
   type SceneNode,
   type Style,
+  type TextNode,
 } from './scene/model.ts';
+export { contrastRatio, HARMONIES, makePalette, type Harmony } from './scene/color.ts';
 export { worldBounds, worldTransform } from './scene/query.ts';
 export { DocumentStore } from './scene/store.ts';
 export {
@@ -29,6 +39,7 @@ export {
   type OpCall,
   type OpDef,
   type OpOutcome,
+  type OpResult,
   type Warning,
 } from './ops/registry.ts';
 export { createRegistry } from './ops/index.ts';
