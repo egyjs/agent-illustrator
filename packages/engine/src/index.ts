@@ -2,7 +2,7 @@ import pkg from '../package.json' with { type: 'json' };
 
 export const ENGINE_VERSION: string = pkg.version;
 
-export { EngineError, type ErrorCode, type ErrorInfo } from './errors.ts';
+export { closest, EngineError, type ErrorCode, type ErrorInfo } from './errors.ts';
 export type { Box, FillRule, Mat6, Seg, Subpath, Vec2 } from './geometry/types.ts';
 export {
   createDocument,
