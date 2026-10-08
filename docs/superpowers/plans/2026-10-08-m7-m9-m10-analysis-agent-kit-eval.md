@@ -134,4 +134,9 @@
 - **Error hints from transcripts (M10 task 5):** most tool errors were style keys in SVG/CSS spelling (`strokeLinecap`, `stroke-width`, `strokeLinejoin`, `strokeDasharray`) and CSS font lists (`"Tajawal, sans-serif"`). Each failed a whole batch. The registry now maps these aliases (and dash strings) before strict validation; unknown keys still fail.
 - Report: `eval/runs/v1-final/index.html` (git-ignored); human scores go in `scores.template.json` per `eval/rubric.md`.
 
+### v1 eval run `v1-haiku` (2026-10-08, Claude Code, Haiku, both modes, after the alias fix)
+- **Tools mode:** 20/20 finished, 4–13 tool calls each, 6 tool errors in total (Sonnet had 19 before the alias fix), 785 s total. Raw SVG: 20/20 rendered, 359 s.
+- **Side by side (orchestrator's read of the contact sheets; human rubric scores still to do):** tools mode is better on 6 briefs, mostly where counts, placement or text fitting matter. `pattern-starfield`: about 80 visible stars vs a nearly empty raw sky. `iso-cube-stack`: a real stacked pyramid vs three loose cubes. `landscape-sunset-lake`: shimmering reflection vs a striped bar. `arabic-cafe-sign`: text fits the board vs crowded with the cup. `character-cat` and `icons-food`: more complete and consistent. About 12 are comparable, and raw is slightly better on 1–2 (e.g. `character-astronaut` pose).
+- **§1.5 verdict:** the gap over raw SVG grows as the model gets smaller (Sonnet: comparable; Haiku: tools ahead on precision-heavy briefs, never clearly worse). The criterion "clearly better than raw SVG" holds for counts, layout and text fitting, not for overall looks on strong models. The owner decides whether that is v1-done.
+
 Deferred items went to `post-v1-backlog.md` (undo-stack byte budget, nested-layer renders over `maxPixels` drawn flat).
