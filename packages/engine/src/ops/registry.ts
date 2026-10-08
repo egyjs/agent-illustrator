@@ -231,6 +231,43 @@ type Parsed = { readonly def: OpDef; readonly input: unknown };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/** SVG and CSS spellings models reach for (seen in eval transcripts), mapped to the style field they mean. */
+const STYLE_ALIASES: Readonly<Record<string, string>> = {
+  'stroke-width': 'strokeWidth',
+  'stroke-linecap': 'strokeCap',
+  strokeLinecap: 'strokeCap',
+  'stroke-linejoin': 'strokeJoin',
+  strokeLinejoin: 'strokeJoin',
+  'stroke-dasharray': 'strokeDash',
+  strokeDasharray: 'strokeDash',
+  'stroke-miterlimit': 'miterLimit',
+  strokeMiterlimit: 'miterLimit',
+  'fill-opacity': 'fillOpacity',
+  'stroke-opacity': 'strokeOpacity',
+  'mix-blend-mode': 'blend',
+  mixBlendMode: 'blend',
+};
+
+/**
+ * Forgives the slips models make most, before strict validation: SVG/CSS style names become the
+ * style fields they mean (a canonical key given too wins), a dash string such as "4 2" becomes a
+ * number list, and a CSS font list such as `"Tajawal", sans-serif` becomes its first family.
+ */
+function normalizeFields(fields: Record<string, unknown>): void {
+  if (isRecord(fields.style)) {
+    const style: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(fields.style)) {
+      const name = Object.hasOwn(STYLE_ALIASES, key) ? STYLE_ALIASES[key]! : key;
+      if (name === key || !Object.hasOwn(style, name)) style[name] = value;
+    }
+    if (typeof style.strokeDash === 'string' && /^[\d.\s,]+$/.test(style.strokeDash)) {
+      style.strokeDash = style.strokeDash.trim().split(/[\s,]+/).map(Number);
+    }
+    fields.style = style;
+  }
+  if (typeof fields.font === 'string' && /[,'"]/.test(fields.font)) fields.font = fields.font.split(',')[0]!.replace(/['"]/g, '').trim();
+}
+
 function parseCall(registry: Registry, call: unknown): Parsed | ErrorInfo {
   if (!isRecord(call)) {
     return { code: 'invalid_input', message: 'each op must be an object', hint: 'Write ops like {"op": "rect", "x": 10, "y": 10, "width": 100, "height": 50}.' };
@@ -247,6 +284,7 @@ function parseCall(registry: Registry, call: unknown): Parsed | ErrorInfo {
     const guess = near.length > 0 ? `Did you mean ${near.map((n) => `"${n}"`).join(' or ')}? ` : '';
     return { code: 'unknown_op', message: `unknown op "${name}"`, hint: `${guess}Known ops: ${registry.names().join(', ')}.` };
   }
+  normalizeFields(fields);
   const parsed = def.schema.safeParse(fields);
   if (!parsed.success) {
     const example = def.examples[0]?.at(-1);

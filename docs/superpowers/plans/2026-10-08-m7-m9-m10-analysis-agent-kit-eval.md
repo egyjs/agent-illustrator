@@ -128,7 +128,10 @@
 - Private repo `egyjs/agent-illustrator` created; first CI run green on ubuntu Node 22/24 and windows Node 24, including the Windows-made regression baselines.
 - **Owner ruling:** eval runs go through the client the owner already pays for, not API keys. `eval/src/clients.ts` drives Claude Code headless (`claude -p`, stream-json, only the server's tools, `ANTHROPIC_*`/`OPENAI_API_KEY` stripped so nothing bills the API); `--client api` stays optional. Codex was only an example and is not built. A Haiku smoke run of `landscape-sunset-lake` finished with 5 tool calls, 0 errors and a correct drawing.
 
-### Open owner action
-Run the 20 briefs through Claude Code on the subscription (`pnpm build`, then `node eval/src/run.ts --mode both`, then `node eval/src/report.ts <run-dir>`), score with `eval/rubric.md`, and turn stuck points in transcripts into better error hints. This also covers M9's "fresh model completes a brief with guides alone".
+### v1 eval run `v1-final` (2026-10-08, Claude Code, Sonnet, both modes)
+- **Tools mode:** 20/20 briefs finished and saved a document, 3–13 tool calls each (median 7), 20–58 s each; every render matches its brief (contact sheets checked by eye). A fresh model completed every brief with only the server's instructions and guides (M9 acceptance).
+- **Raw-SVG baseline:** 20/20 produced a renderable SVG. Sonnet's raw SVG is strong; side by side, tools mode is not clearly better on looks. Its clear wins are correctness (raw `arabic-cafe-sign` text overflows its sign; tools text is measured and placed), editable semantic ids, lint, and deterministic output. PROJECT_INIT §1.5 "clearly better than raw SVG" is therefore **not shown for Sonnet**; a smaller model (Haiku) is the next comparison.
+- **Error hints from transcripts (M10 task 5):** most tool errors were style keys in SVG/CSS spelling (`strokeLinecap`, `stroke-width`, `strokeLinejoin`, `strokeDasharray`) and CSS font lists (`"Tajawal, sans-serif"`). Each failed a whole batch. The registry now maps these aliases (and dash strings) before strict validation; unknown keys still fail.
+- Report: `eval/runs/v1-final/index.html` (git-ignored); human scores go in `scores.template.json` per `eval/rubric.md`.
 
 Deferred items went to `post-v1-backlog.md` (undo-stack byte budget, nested-layer renders over `maxPixels` drawn flat).
