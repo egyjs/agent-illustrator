@@ -37,7 +37,7 @@ overlay, fix anything that looks off, then export the SVG."
 
 | Client (version) | Tools listed | Image visible | Model saw image | Batch errors understood | Export valid | Notes |
 |---|---|---|---|---|---|---|
-| (pending owner run) | | | | | | |
+| Owner run, client not recorded (2026-10-08) | yes (4) | not recorded | yes: critiqued the ids render and a 2× zoom of the house | n/a (no failing batch) | yes: SVGO output, ids and `house` group kept (`C:\Users\el3za\tmp\landscape.svg`) | Landscape with sky, ground, sun, house (body, roof, chimney, eave, windows with crossbars, door, knob). Only regular polygons existed, so the model faked a gable roof with a diamond half-hidden behind the body; M4 `path_from_points`/`path_commands` remove that workaround. |
 
 Automated stand-in until then: `packages/mcp-server/test/server.e2e.test.ts` and `pnpm smoke` (SDK client over stdio).
 MCP Inspector 2.9.0 `--cli … --method tools/list` against `dist/cli.mjs`: 4 tools, exit 0 (2026-10-08).
