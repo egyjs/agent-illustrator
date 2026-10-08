@@ -180,7 +180,9 @@ export function lengthTable(c: Cubic, samples = 32): LengthTable {
 
 /**
  * Parameter t where the arc length from 0 reaches s (s is clamped to [0, total]): binary search in
- * the table, linear interpolation, then one Newton step on |B'(t)|.
+ * the table, linear interpolation, then Newton steps on |B'(t)| kept inside the table interval
+ * (bisecting when a step would leave it). The bracket matters next to a zero derivative, as at
+ * the ends of every straight segment, where s(t) ≈ k·t² and an unguarded step overshoots.
  */
 export function tAtLength(c: Cubic, table: LengthTable, s: number): number {
   const acc = table.s, ts = table.t;
@@ -194,11 +196,19 @@ export function tAtLength(c: Cubic, table: LengthTable, s: number): number {
     if (acc[mid]! <= s) lo = mid;
     else hi = mid;
   }
-  const s0 = acc[lo]!, s1 = acc[hi]!, t0 = ts[lo]!, t1 = ts[hi]!;
-  let u = s1 > s0 ? t0 + ((s - s0) / (s1 - s0)) * (t1 - t0) : t0;
-  const v = speed(c, u);
-  if (v > TINY) u -= (s0 + gauss(c, t0, u) - s) / v;
-  return Math.min(t1, Math.max(t0, u));
+  const s0 = acc[lo]!, s1 = acc[hi]!, t0 = ts[lo]!;
+  let a = t0, b = ts[hi]!;
+  let u = s1 > s0 ? a + ((s - s0) / (s1 - s0)) * (b - a) : a;
+  for (let i = 0; i < 30; i++) {
+    const f = s0 + gauss(c, t0, u) - s;
+    if (Math.abs(f) <= 1e-12 * total) break;
+    if (f > 0) b = u;
+    else a = u;
+    const v = speed(c, u);
+    const next = v > TINY ? u - f / v : Number.NaN;
+    u = next > a && next < b ? next : (a + b) / 2;
+  }
+  return u;
 }
 
 export type PathSample = { readonly point: Vec2; readonly tangent: Vec2 };

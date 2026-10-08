@@ -26,13 +26,17 @@ export function booleanOp(op: BooleanOp, a: Shape, b: Shape): Shape {
   const box = pathBounds([...left.subpaths, ...right.subpaths])!;
   const size = Math.max(1, Math.hypot(box.width, box.height));
   return withPaper((scope) => {
-    const pa = toPaper(scope, left.subpaths, left.fillRule);
-    const pb = toPaper(scope, right.subpaths, right.fillRule);
+    // Fill closes every subpath. Hand them to paper closed: its own close for open paths merges
+    // a last point that equals the start and then straightens that last curve.
+    const pa = toPaper(scope, left.subpaths.map(asClosed), left.fillRule);
+    const pb = toPaper(scope, right.subpaths.map(asClosed), right.fillRule);
     const result = pa[PAPER_METHOD[op]](pb, { insert: false });
     result.reorient(true, true);
     return { subpaths: tidy(fromPaper(result), size), fillRule: 'nonzero' };
   });
 }
+
+const asClosed = (sp: Subpath): Subpath => (sp.closed ? sp : { ...sp, closed: true });
 
 function withEmptyOperand(op: BooleanOp, a: Shape, b: Shape): Shape {
   const none: Shape = { subpaths: [], fillRule: 'nonzero' };
@@ -44,6 +48,9 @@ function withEmptyOperand(op: BooleanOp, a: Shape, b: Shape): Shape {
 /**
  * Drops segments that do not move (all three points within 1e-9·size of the current point) and
  * loops whose area is below (1e-4·size)². A closed loop keeps ending exactly at its start.
+ * After reorient the net signed area is the covered area. When that is below the same epsilon the
+ * result is empty, even if paper returned loops that cancel: near-coincident curves give two
+ * full-size loops of opposite orientation.
  */
 function tidy(subpaths: readonly Subpath[], size: number): Subpath[] {
   const pointEps = 1e-9 * size, areaEps = (1e-4 * size) ** 2;
@@ -65,5 +72,5 @@ function tidy(subpaths: readonly Subpath[], size: number): Subpath[] {
     const clean: Subpath = { start: sp.start, segs, closed: sp.closed };
     if (segs.length > 0 && Math.abs(signedArea([clean])) >= areaEps) out.push(clean);
   }
-  return out;
+  return Math.abs(signedArea(out)) < areaEps ? [] : out;
 }

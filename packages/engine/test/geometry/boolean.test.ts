@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { booleanOp, type Shape } from '../../src/geometry/boolean.ts';
 import { contains, rings, signedArea } from '../../src/geometry/flatten.ts';
-import { ellipse, polyline } from '../../src/geometry/paths.ts';
+import { ellipse, polyline, smooth } from '../../src/geometry/paths.ts';
 import type { FillRule, Subpath } from '../../src/geometry/types.ts';
 import { KAPPA_CIRCLE_AREA, square } from './helpers.ts';
 
@@ -117,6 +117,19 @@ describe('boolean: regression suite (R5)', () => {
     const r = booleanOp('intersect', nz(polyline([[0, 0], [10, 0], [10, 10]], false)), nz(square(0, 0, 10)));
     expectWellFormed(r);
     expect(area(r)).toBeCloseTo(50, 6);
+  });
+
+  it('closes an open operand that ends at its start without flattening its last curve', () => {
+    const openCircle: Subpath = { ...ellipse(0, 0, 50, 50), closed: false };
+    expect(area(booleanOp('intersect', nz(openCircle), nz(square(-100, -100, 200))))).toBeCloseTo(KAPPA_CIRCLE_AREA * 2500, 3);
+    const loop = smooth([[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]], false);
+    expect(area(booleanOp('intersect', nz(loop), nz(square(-100, -100, 400))))).toBeCloseTo(signedArea([loop]), 3);
+  });
+
+  it('near-coincident curved operands cancel to an empty result, not two full-size loops', () => {
+    for (const op of ['subtract', 'exclude'] as const) {
+      expect(booleanOp(op, nz(ellipse(0, 0, 50, 50)), nz(ellipse(1e-7, 0, 50, 50))).subpaths).toEqual([]);
+    }
   });
 
   it('handles empty operands without guessing', () => {

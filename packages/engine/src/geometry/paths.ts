@@ -234,14 +234,35 @@ export function smooth(points: readonly Vec2[], closed: boolean): Subpath {
   });
 }
 
-/** Schneider curve fit through the points: paper `simplify`, where `tolerance` is the maximum error (D5). */
+/**
+ * Schneider curve fit near the points (paper `simplify`, D5): every input point ends up within
+ * `tolerance` of the curve. paper compares squared distances, so it gets tolerance².
+ *
+ * A closed fit does not use paper's closed mode, which never fits the curve across the seam.
+ * Instead it fits the open run p0…pn−1, p0, so both ends are exact anchors at p0. Two guide points
+ * a hair away from p0 along the central tangent (p1 − pn−1) make paper's end tangents agree, so
+ * the seam is smooth.
+ */
 export function fit(points: readonly Vec2[], closed: boolean, tolerance = 2.5): Subpath {
   if (!(tolerance > 0)) throw new RangeError(`tolerance must be > 0, got ${tolerance}`);
   const pts = distinct(points, closed);
   if (pts.length < 2) throw new RangeError('fit needs at least 2 distinct points');
+  const run = closed ? closedRun(pts) : pts;
   return withPaper((scope) => {
-    const path = new scope.Path({ segments: pts.map(([x, y]) => [x, y]), closed, insert: false });
-    path.simplify(tolerance);
-    return fromPaper(path)[0]!;
+    const path = new scope.Path({ segments: run.map(([x, y]) => [x, y]), insert: false });
+    path.simplify(tolerance * tolerance);
+    const sp = fromPaper(path)[0]!;
+    return closed ? { ...sp, closed: true } : sp;
   });
+}
+
+/** p0, guide, p1 … pn−1, guide, p0: an open run whose end tangents both follow p1 − pn−1. */
+function closedRun(pts: readonly Vec2[]): Vec2[] {
+  const p0 = pts[0]!, p1 = pts[1]!, pn = pts.at(-1)!;
+  if (pts.length < 3) return [...pts, p0];
+  let dx = p1[0] - pn[0], dy = p1[1] - pn[1];
+  if (dx === 0 && dy === 0) [dx, dy] = [p1[0] - p0[0], p1[1] - p0[1]];
+  const reach = 1e-3 * Math.min(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), Math.hypot(p0[0] - pn[0], p0[1] - pn[1]));
+  const k = reach / Math.hypot(dx, dy);
+  return [p0, [p0[0] + dx * k, p0[1] + dy * k], ...pts.slice(1), [p0[0] - dx * k, p0[1] - dy * k], p0];
 }

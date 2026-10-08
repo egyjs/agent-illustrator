@@ -199,6 +199,30 @@ describe('paths: smooth and fit (paper)', () => {
     for (const p of pts) expect(distanceToPolyline(p, poly)).toBeLessThan(4);
   });
 
+  it('fit tolerance is the maximum distance of any input point from the curve', () => {
+    const pts = Array.from({ length: 300 }, (_, i): Vec2 => [i * 2, 50 * Math.sin(i / 20) + 2 * Math.sin(i * 12.9898)]);
+    for (const tol of [0.25, 1, 5]) {
+      const poly = flatten(fit(pts, false, tol), 0.01);
+      for (const p of pts) expect(distanceToPolyline(p, poly)).toBeLessThanOrEqual(tol + 0.02);
+    }
+  });
+
+  it('a closed fit stays within tolerance at the seam and joins smoothly there', () => {
+    for (const [n, tol] of [[16, 2.5], [64, 0.5], [200, 0.5]] as const) {
+      const pts = Array.from({ length: n }, (_, i): Vec2 => [100 * Math.cos((2 * Math.PI * i) / n), 100 * Math.sin((2 * Math.PI * i) / n)]);
+      const sp = fit(pts, true, tol);
+      expect(sp.closed).toBe(true);
+      expect(sp.segs.at(-1)!.slice(4)).toEqual([...sp.start]);
+      const poly = flatten(sp, 0.01);
+      for (const p of pts) expect(distanceToPolyline(p, poly)).toBeLessThanOrEqual(tol + 0.02);
+      const first = sp.segs[0]!, last = sp.segs.at(-1)!;
+      const out: Vec2 = [first[0] - sp.start[0], first[1] - sp.start[1]];
+      const inc: Vec2 = [sp.start[0] - last[2], sp.start[1] - last[3]];
+      expect(Math.abs(out[0] * inc[1] - out[1] * inc[0]) / (Math.hypot(...out) * Math.hypot(...inc))).toBeLessThan(1e-6);
+      expect(out[0] * inc[0] + out[1] * inc[1]).toBeGreaterThan(0);
+    }
+  });
+
   it('smooth and fit reject degenerate input', () => {
     expect(() => smooth([[1, 1], [1, 1]], false)).toThrow(RangeError);
     expect(() => fit([[1, 1]], false)).toThrow(RangeError);

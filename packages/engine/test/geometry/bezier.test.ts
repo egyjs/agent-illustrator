@@ -117,6 +117,16 @@ describe('bezier: arc length', () => {
     expect(tAtLength(quarter, table, 1e9)).toBe(1);
   });
 
+  it('inverts arc length exactly next to zero-derivative ends', () => {
+    const m = measure(square(0, 0, 1000));
+    for (const s of [0.1, 1, 31, 500, 969, 999.5]) expectVec(m.at(s).point, [s, 0], 6);
+    const cusp: Cubic = [0, 0, 0, 0, 100, 0, 100, 100];
+    const table = lengthTable(cusp);
+    for (const t of [0.001, 0.01, 0.02, 0.5, 0.98, 0.999]) {
+      expect(tAtLength(cusp, table, cubicLength(cusp, t))).toBeCloseTo(t, 8);
+    }
+  });
+
   it('handles a curve collapsed to a point', () => {
     expect(cubicLength(dot)).toBe(0);
     expect(tAtLength(dot, lengthTable(dot), 3)).toBe(0);
