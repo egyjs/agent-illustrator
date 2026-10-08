@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { pathBounds, pointAt } from '../../src/geometry/bezier.ts';
-import { signedArea } from '../../src/geometry/flatten.ts';
-import { arcToCubics, ellipse, line, polyline, quadToCubic, roundCorners } from '../../src/geometry/paths.ts';
+import { flatten, signedArea } from '../../src/geometry/flatten.ts';
+import { arcToCubics, ellipse, fit, line, polyline, quadToCubic, roundCorners, smooth } from '../../src/geometry/paths.ts';
 import type { Box, Subpath, Vec2 } from '../../src/geometry/types.ts';
-import { expectVec, KAPPA_CIRCLE_AREA, kappaCircle } from './helpers.ts';
+import { distanceToPolyline, expectVec, KAPPA_CIRCLE_AREA, kappaCircle } from './helpers.ts';
 
 function expectBox(actual: Box | null, expected: Box, digits: number): void {
   expect(actual).not.toBeNull();
@@ -153,5 +153,55 @@ describe('paths: roundCorners', () => {
   it('skips a hairpin where the path folds back on itself', () => {
     const r = roundCorners(polyline([[0, 0], [100, 0], [50, 0]], false), 10);
     expect(r.skipped).toBe(1);
+  });
+});
+
+describe('paths: smooth and fit (paper)', () => {
+  it('smooth passes through every point with tangent-continuous joins', () => {
+    const pts: Vec2[] = [[0, 0], [50, 40], [100, 0], [150, 40], [200, 0]];
+    const sp = smooth(pts, false);
+    expect([sp.start, ...sp.segs.map((g) => [g[4], g[5]])]).toEqual(pts);
+    for (let i = 0; i + 1 < sp.segs.length; i++) {
+      const [, , c2x, c2y, x, y] = sp.segs[i]!;
+      const [c1x, c1y] = sp.segs[i + 1]!;
+      const inX = x - c2x, inY = y - c2y, outX = c1x - x, outY = c1y - y;
+      expect(Math.abs(inX * outY - inY * outX)).toBeLessThan(1e-9); // collinear handles
+      expect(inX * outX + inY * outY).toBeGreaterThan(0); // pointing the same way
+    }
+  });
+
+  it('smooth is centripetal: uneven spacing does not overshoot', () => {
+    // Uniform Catmull–Rom would put the first control of the short middle segment at x ≈ 116.8.
+    const sp = smooth([[0, 0], [100, 0], [101, 0], [200, 0]], false);
+    const [c1x, , c2x] = sp.segs[1]!;
+    for (const x of [c1x, c2x]) {
+      expect(x).toBeGreaterThanOrEqual(100);
+      expect(x).toBeLessThanOrEqual(101);
+    }
+  });
+
+  it('smooth closes the loop and ignores duplicate points', () => {
+    const sp = smooth([[0, 0], [100, 0], [100, 0], [100, 100], [0, 100], [0, 0]], true);
+    expect(sp.closed).toBe(true);
+    expect(sp.segs).toHaveLength(4);
+    expect(sp.segs.at(-1)!.slice(4)).toEqual([0, 0]);
+    expect(sp.segs.flat().every(Number.isFinite)).toBe(true);
+  });
+
+  it('fit reduces 200 noisy points to far fewer segments within tolerance', () => {
+    const pts = Array.from({ length: 200 }, (_, i): Vec2 => {
+      const a = (i / 200) * 2 * Math.PI, r = 100 + Math.sin(i * 12.9898);
+      return [Math.cos(a) * r, Math.sin(a) * r];
+    });
+    const sp = fit(pts, true, 2.5);
+    expect(sp.segs.length).toBeLessThan(60);
+    const poly = flatten(sp, 0.05);
+    for (const p of pts) expect(distanceToPolyline(p, poly)).toBeLessThan(4);
+  });
+
+  it('smooth and fit reject degenerate input', () => {
+    expect(() => smooth([[1, 1], [1, 1]], false)).toThrow(RangeError);
+    expect(() => fit([[1, 1]], false)).toThrow(RangeError);
+    expect(() => fit([[0, 0], [1, 1]], false, 0)).toThrow(RangeError);
   });
 });

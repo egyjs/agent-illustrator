@@ -68,7 +68,11 @@ importers:
 
   packages/agent-kit: {}
 
-  packages/engine: {}
+  packages/engine:
+    dependencies:
+      paper:
+        specifier: 'catalog:'
+        version: 0.12.18
 
   packages/mcp-server:
     devDependencies:

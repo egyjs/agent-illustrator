@@ -1,4 +1,5 @@
 import { cubics, isStraight, tangentAt } from './bezier.ts';
+import { fromPaper, withPaper } from './paper-adapter.ts';
 import { cosSinDeg } from './transform.ts';
 import type { Seg, Subpath, Vec2 } from './types.ts';
 
@@ -220,4 +221,27 @@ export function roundCorners(sp: Subpath, radius: number): RoundedCorners {
     }
   }
   return { subpath: { start, segs, closed: sp.closed }, clamped, skipped };
+}
+
+/** Centripetal Catmull–Rom through the points: paper `smooth`, α = 0.5, so no cusps or self-loops (D5). */
+export function smooth(points: readonly Vec2[], closed: boolean): Subpath {
+  const pts = distinct(points, closed);
+  if (pts.length < 2) throw new RangeError('smooth needs at least 2 distinct points');
+  return withPaper((scope) => {
+    const path = new scope.Path({ segments: pts.map(([x, y]) => [x, y]), closed, insert: false });
+    path.smooth({ type: 'catmull-rom', factor: 0.5 });
+    return fromPaper(path)[0]!;
+  });
+}
+
+/** Schneider curve fit through the points: paper `simplify`, where `tolerance` is the maximum error (D5). */
+export function fit(points: readonly Vec2[], closed: boolean, tolerance = 2.5): Subpath {
+  if (!(tolerance > 0)) throw new RangeError(`tolerance must be > 0, got ${tolerance}`);
+  const pts = distinct(points, closed);
+  if (pts.length < 2) throw new RangeError('fit needs at least 2 distinct points');
+  return withPaper((scope) => {
+    const path = new scope.Path({ segments: pts.map(([x, y]) => [x, y]), closed, insert: false });
+    path.simplify(tolerance);
+    return fromPaper(path)[0]!;
+  });
 }
