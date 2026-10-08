@@ -77,6 +77,13 @@ type Text  = Base & { type: 'text'; content: string; font: FontSpec; anchor: Tex
    - Text on a path copies the guide's first subpath into the node (`at.kind: 'path'`), like clip.
    - Copy generators (scatter, repeat_along_path, array) emit a group of clones and remove the source unless `keep`. `Limits.maxGenerated` (default 2000) caps one op's copies or samples.
    - Noise is `simplex-noise@4.0.3`; Alea is hand-written in `random/rng.ts` (point 6).
+9. **Refinements in M7, M9 and M10 (2026-10-08; plan `2026-10-08-m7-m9-m10-analysis-agent-kit-eval.md`):**
+   - The MCP surface is 10 tools (`create_document`, `apply_ops`, `render`, `export_svg`, `describe_scene`, `measure`, `lint`, `history`, `document_io`, `guide`) and one prompt (`illustrate`).
+   - Analysis lives in `engine/src/analysis`; tools are thin wrappers. `lint` issues carry a ready `fix` op; `overlap` is opt-in; contrast is sampled from a render without the text. `apply_ops` adds incremental lint for the ids it touched.
+   - `DocumentStore` keeps an automatic undo stack (50) besides named checkpoints; restore and undo reset `$last`.
+   - `document_io` is confined to `AGENT_ILLUSTRATOR_DOCS_DIR` with a strict name pattern; load opens a new session.
+   - `guide(topic)` serves agent-kit files plus a generated op catalog (`ops`, `op:<name>`); a CI test runs every JSON example in the content.
+   - Eval is the private `eval/` workspace package: committed render-regression baselines in CI, and a dev-only OpenAI-compatible harness the owner runs with API keys.
 
 ## Open suggestions (Pending evidence)
 Record each outcome here with a date and the evidence (spike test name or doc link).
