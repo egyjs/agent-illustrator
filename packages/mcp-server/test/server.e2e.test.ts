@@ -87,10 +87,11 @@ describe('agent-illustrator over stdio', () => {
   it('serves the core contract as instructions and lists its tools with portable schemas', async () => {
     expect(client.getInstructions()).toContain('apply_ops');
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['apply_ops', 'create_document', 'export_svg', 'guide', 'render']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['apply_ops', 'create_document', 'describe_scene', 'document_io', 'export_svg', 'guide', 'history', 'lint', 'measure', 'render']);
     const ops = tools.find((t) => t.name === 'apply_ops')!;
     expect(JSON.stringify(ops.inputSchema)).toContain('"additionalProperties":true');
     expect(ops.description).toContain('rect(');
+    expect(ops.description).toContain('strokeOpacity');
     for (const tool of tools) expect(JSON.stringify(tool.inputSchema)).not.toMatch(/\$ref|\$defs|"oneOf"|"anyOf"/);
   });
 
@@ -130,6 +131,21 @@ describe('agent-illustrator over stdio', () => {
     const svg = (exported.content as Block[])[0]!.text!;
     expect(svg).toMatch(/^<svg[^>]*viewBox="0 0 400 300"/);
     expect(svg).toContain('id="sun"');
+  }, 30_000);
+
+  it('describe_scene and lint read the document over the wire', async () => {
+    const docId = body(await client.callTool({ name: 'create_document', arguments: { width: 200, height: 100 } })).doc_id as string;
+    const applied = await client.callTool({ name: 'apply_ops', arguments: { doc_id: docId, ops: [{ op: 'rect', id: 'stray', x: 500, y: 10, width: 40, height: 40 }] } });
+    expect(body(applied)).toMatchObject({ ok: true, lint: [{ code: 'off_canvas', ids: ['stray'] }] });
+
+    const described = await client.callTool({ name: 'describe_scene', arguments: { doc_id: docId, detail: 'outline' } });
+    expect(body(described)).toMatchObject({ canvas: { width: 200, height: 100 }, nodeCount: 1, nodes: [{ id: 'stray', type: 'path' }] });
+
+    const linted = await client.callTool({ name: 'lint', arguments: { doc_id: docId } });
+    expect(body(linted)).toMatchObject({ truncated: false, issues: [{ code: 'off_canvas', severity: 'warning', ids: ['stray'] }] });
+    const bad = await client.callTool({ name: 'lint', arguments: { doc_id: docId, checks: ['nope'] } });
+    expect(bad.isError).toBe(true);
+    expect(body(bad)).toMatchObject({ error: { code: 'invalid_input' } });
   }, 30_000);
 
   it('a failing batch is an isError result and the server keeps serving', async () => {

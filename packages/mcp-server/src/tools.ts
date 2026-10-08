@@ -6,9 +6,14 @@ import {
   EngineError,
   executeBatch,
   exportSvg,
+  INCREMENTAL_CHECKS,
+  lint,
   rasterize,
   type Box,
+  type Doc,
   type Limits,
+  type LintIssue,
+  type OpDef,
   type OpOutcome,
   type RasterFonts,
   type Registry,
@@ -101,22 +106,40 @@ export function applyOpsInputSchema(registry: Registry, limits: Limits): Record<
   };
 }
 
-/** One line per op, e.g. "rect(x, y, width, height, id?, …)": required fields first, both in schema order. */
-export function opSignatures(registry: Registry): string {
-  return registry
-    .list()
-    .map((def) => {
-      const schema = z.toJSONSchema(def.schema, { io: 'input' }) as { properties?: Record<string, unknown>; required?: string[] };
-      const required = new Set(schema.required ?? []);
-      const fields = Object.keys(schema.properties ?? {});
-      const ordered = [...fields.filter((f) => required.has(f)), ...fields.filter((f) => !required.has(f)).map((f) => `${f}?`)];
-      return `${def.name}(${ordered.join(', ')})`;
-    })
-    .join('\n');
+/** An op as "rect(x, y, width, height, id?, …)": required fields first, both in schema order. */
+export function opSignature(def: OpDef): string {
+  const schema = z.toJSONSchema(def.schema, { io: 'input' }) as { properties?: Record<string, unknown>; required?: string[] };
+  const required = new Set(schema.required ?? []);
+  const fields = Object.keys(schema.properties ?? {});
+  const ordered = [...fields.filter((f) => required.has(f)), ...fields.filter((f) => !required.has(f)).map((f) => `${f}?`)];
+  return `${def.name}(${ordered.join(', ')})`;
 }
+
+/** One signature per line, for the apply_ops description. */
+export const opSignatures = (registry: Registry): string => registry.list().map(opSignature).join('\n');
 
 /** The shape check only; op names, op fields and the batch size are the engine's to judge, with its hints. */
 const applyOpsInput = z.strictObject({ doc_id: z.string(), ops: z.array(z.unknown()), dry_run: z.boolean().optional() });
+
+/** Issues beyond this many are left for an explicit lint call. */
+const MAX_BATCH_LINT_ISSUES = 10;
+
+/**
+ * Cheap lint of the nodes a committed batch created or changed, so mistakes show up in the same
+ * reply. Undefined when there is nothing to report; a failure here is logged and never fails the batch.
+ */
+function lintTouched(deps: ToolDeps, doc: Doc, results: readonly OpOutcome[]): LintIssue[] | undefined {
+  const named = results.flatMap((o) => (o.status === 'ok' ? [...(o.ids ?? []), ...(o.id === undefined ? [] : [o.id])] : []));
+  const ids = [...new Set(named)].filter((id) => Object.hasOwn(doc.nodes, id));
+  if (ids.length === 0) return undefined;
+  try {
+    const { issues } = lint(doc, { ids, checks: INCREMENTAL_CHECKS, maxIssues: MAX_BATCH_LINT_ISSUES, fonts: deps.fonts });
+    return issues.length > 0 ? issues : undefined;
+  } catch (e) {
+    deps.log.warn({ err: e }, 'lint after apply_ops failed');
+    return undefined;
+  }
+}
 
 export function applyOpsTool(deps: ToolDeps, raw: unknown): ToolResult {
   return guarded(deps, 'apply_ops', () => {
@@ -132,7 +155,8 @@ export function applyOpsTool(deps: ToolDeps, raw: unknown): ToolResult {
       session.store.commit(result.doc);
       session.lastCreated = result.lastCreated;
     }
-    const body = { ok: result.ok, committed: result.committed, doc_id: session.id, results: result.results.map(compact) };
+    const issues = result.committed && result.ok ? lintTouched(deps, result.doc, result.results) : undefined;
+    const body = { ok: result.ok, committed: result.committed, doc_id: session.id, results: result.results.map(compact), ...(issues ? { lint: issues } : {}) };
     return result.ok ? { content: [text(body)] } : { isError: true, content: [text(body)] };
   });
 }

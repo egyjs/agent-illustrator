@@ -4,7 +4,7 @@ Draw vector art with tool calls. The engine owns geometry, layout and rendering:
 
 ## Tools
 - `create_document`: new canvas (width, height, background, seed) -> `doc_id`.
-- `apply_ops`: run a batch of ops `{"op": name, ...fields}` on it. A batch applies fully or not at all (max 200 ops). Results carry each node's `bounds`.
+- `apply_ops`: run a batch of ops `{"op": name, ...fields}` on it. A batch applies fully or not at all (max 200 ops). Results carry each node's `bounds`, plus `lint` issues when the nodes just drawn have problems.
 - `render`: PNG of the canvas. Overlays `ids`, `bounds`, `grid`; `region` and `scale` zoom in. Skip it if you cannot see images.
 - `describe_scene`, `measure`, `lint`: read the scene as text: structure and styles, sizes and gaps, problems with ready-to-apply `fix` ops.
 - `history`: `checkpoint` a label, `restore` it, `undo`, `list`. `document_io`: `save`, `load`, `list` documents on disk.

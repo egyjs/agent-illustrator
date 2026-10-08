@@ -1,8 +1,11 @@
+import { StyleSchema } from '@agent-illustrator/engine';
 import { fromJsonSchema, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
 import type { AgentKit } from './agent-kit.ts';
+import { describeSceneInput, describeSceneTool, lintInput, lintTool, measureInput, measureTool } from './analysis-tools.ts';
 import { guideInput, guideTool, illustrateArgs, illustratePrompt } from './guide-tool.ts';
+import { documentIoInput, documentIoTool, historyInput, historyTool } from './history-tools.ts';
 import {
   applyOpsInputSchema,
   applyOpsTool,
@@ -62,7 +65,7 @@ export function createServer(deps: ToolDeps, kit: AgentKit): McpServer {
         'like "50%" are relative to the canvas. Give nodes short semantic ids; "$last" is the most recent node. Returns each op\'s ' +
         'status, id and exact bounds, or errors with a hint.\nOps:\n' +
         opSignatures(deps.registry) +
-        '\nstyle fields: fill, stroke (CSS colors or "none"), strokeWidth, strokeCap, strokeJoin, strokeDash, miterLimit, opacity, fillOpacity, strokeOpacity.',
+        `\nstyle fields: ${Object.keys(StyleSchema.shape).join(', ')}. fill and stroke take a CSS color, a token or "none". A committed batch also returns "lint" issues found on the nodes it touched.`,
       inputSchema: advertise(applyOpsInputSchema(deps.registry, deps.config.limits)),
     },
     async (input) => logged(deps, 'apply_ops', input, () => applyOpsTool(deps, input)),
@@ -89,6 +92,59 @@ export function createServer(deps: ToolDeps, kit: AgentKit): McpServer {
       annotations: { readOnlyHint: true },
     },
     async (input) => logged(deps, 'export_svg', input, () => exportSvgTool(deps, input)),
+  );
+
+  server.registerTool(
+    'describe_scene',
+    {
+      title: 'Describe scene',
+      description: 'The scene as text: canvas, tokens, and the node tree with bounds and styles. Use it to see what exists without a render.',
+      inputSchema: advertise(z.toJSONSchema(describeSceneInput)),
+      annotations: { readOnlyHint: true },
+    },
+    async (input) => logged(deps, 'describe_scene', input, () => describeSceneTool(deps, input)),
+  );
+
+  server.registerTool(
+    'measure',
+    {
+      title: 'Measure',
+      description: 'Exact bounds, center, area and length of 1-50 nodes; for 2-12 nodes also the gap, overlap and center distance of each pair.',
+      inputSchema: advertise(z.toJSONSchema(measureInput)),
+      annotations: { readOnlyHint: true },
+    },
+    async (input) => logged(deps, 'measure', input, () => measureTool(deps, input)),
+  );
+
+  server.registerTool(
+    'lint',
+    {
+      title: 'Lint',
+      description: 'Find off-canvas, degenerate, tiny, almost-aligned, colliding or low-contrast items. Issues carry a hint and often a ready "fix" op.',
+      inputSchema: advertise(z.toJSONSchema(lintInput)),
+      annotations: { readOnlyHint: true },
+    },
+    async (input) => logged(deps, 'lint', input, () => lintTool(deps, input)),
+  );
+
+  server.registerTool(
+    'history',
+    {
+      title: 'History',
+      description: 'Name a checkpoint, restore one, undo the last change, or list checkpoints.',
+      inputSchema: advertise(z.toJSONSchema(historyInput)),
+    },
+    async (input) => logged(deps, 'history', input, () => historyTool(deps, input)),
+  );
+
+  server.registerTool(
+    'document_io',
+    {
+      title: 'Document I/O',
+      description: 'Save a document to disk by name, load a saved one as a new document, or list saved documents.',
+      inputSchema: advertise(z.toJSONSchema(documentIoInput)),
+    },
+    async (input) => logged(deps, 'document_io', input, () => documentIoTool(deps, input)),
   );
 
   server.registerTool(

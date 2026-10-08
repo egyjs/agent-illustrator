@@ -12,7 +12,7 @@ Tools: `render`, `lint`, `describe_scene`, `measure`. Check after each stage, no
 - `measure` with `ids` returns bounds, center, area and path length per node; with 2-12 ids also the center distance, `gap` on each axis and whether and how much shapes `overlap`. Use it to check spacing, sizes and that a lid sits on its jar.
 
 ## lint
-- `lint` returns `issues`: `{code, severity, ids, message, hint, fix?}`, warnings first. `fix` is a ready op call. Optional `checks` picks checks, `ids` limits it to those nodes and the pairs they form.
+- `lint` returns `issues`: `{code, severity, ids, message, hint, fix?}`, warnings first. `fix` is a ready op call. Optional `checks` picks checks (`off_canvas`, `degenerate`, `tiny`, `near_miss`, `text_overlap`, `contrast`, `overlap`; the last is off by default), `ids` limits it to those nodes and the pairs they form, `tolerance` sets the near-miss distance in px.
 - `off_canvas`: a shape lies fully outside the canvas. Move it in (the fix places it at the center) or delete it. `partly_off_canvas` (info) is fine for a deliberate bleed.
 - `degenerate`, `empty_group`, `no_ink`: nothing visible is there. Delete it or find the op that failed to draw it.
 - `tiny` (info): a shape smaller than a couple of units. Enlarge it or delete it.

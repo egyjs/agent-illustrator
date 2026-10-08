@@ -22,5 +22,9 @@ const rendered = await client.callTool({ name: 'render', arguments: { doc_id: do
 if (!(rendered.content as Block[]).some((b) => b.type === 'image' && b.data)) fail('render', rendered.content);
 const svg = first(await client.callTool({ name: 'export_svg', arguments: { doc_id: docId } }));
 if (!svg.includes('id="dot"')) fail('export_svg', svg);
+const index = await client.callTool({ name: 'guide', arguments: {} });
+if (index.isError || !first(index).includes('workflow')) fail('guide', index.content);
+const linted = await client.callTool({ name: 'lint', arguments: { doc_id: docId } });
+if (linted.isError || !Array.isArray((JSON.parse(first(linted)) as { issues?: unknown }).issues)) fail('lint', linted.content);
 await client.close();
 process.stderr.write(`smoke-mcp: ok (${docId}, ${svg.length} bytes of SVG)\n`);

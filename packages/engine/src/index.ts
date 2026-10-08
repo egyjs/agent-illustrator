@@ -7,6 +7,7 @@ export type { Box, FillRule, Mat6, Seg, Subpath, Vec2 } from './geometry/types.t
 export {
   createDocument,
   integrityProblem,
+  StyleSchema,
   validateDocument,
   type BlendMode,
   type Canvas,
@@ -27,6 +28,9 @@ export {
 } from './scene/model.ts';
 export { contrastRatio, HARMONIES, makePalette, type Harmony } from './scene/color.ts';
 export { worldBounds, worldTransform } from './scene/query.ts';
+export { describeScene, type DescribeDetail, type DescribeOptions, type NodeInfo, type SceneDescription } from './analysis/describe.ts';
+export { MAX_MEASURE_IDS, MAX_PAIR_IDS, measure, type Measurement, type NodeMeasure, type PairMeasure } from './analysis/measure.ts';
+export { DEFAULT_CHECKS, INCREMENTAL_CHECKS, LINT_CHECKS, lint, type LintCheck, type LintIssue, type LintOptions, type LintResult } from './analysis/lint.ts';
 export { DocumentStore } from './scene/store.ts';
 export {
   DEFAULT_LIMITS,

@@ -1,7 +1,7 @@
 import { closest, EngineError, type OpDef, type Registry } from '@agent-illustrator/engine';
 import { z } from 'zod';
 import { markdownTitle, yamlScalar, type AgentKit } from './agent-kit.ts';
-import { guarded, parse, text, type ToolDeps, type ToolResult } from './tools.ts';
+import { guarded, opSignature, parse, text, type ToolDeps, type ToolResult } from './tools.ts';
 
 export const guideInput = z.object({
   topic: z.string().optional().describe('What to read: "workflow", a guide name, "ops", "op:<name>", "presets", "preset:<name>" or "text-only"; omit for the index'),
@@ -62,13 +62,12 @@ function fieldsOf(def: OpDef): Field[] {
   return [...fields.filter((f) => !f.optional), ...fields.filter((f) => f.optional)];
 }
 
-const signature = (def: OpDef) => `${def.name}(${fieldsOf(def).map((f) => f.name + (f.optional ? '?' : '')).join(', ')})`;
 const firstSentence = (s: string) => /^.*?[.!?](?=\s|$)/s.exec(s)?.[0] ?? s;
 const entry = (topic: string, description: string) => (description === '' ? topic : `${topic} - ${description}`);
 
 function opCatalog(registry: Registry): string {
   const sections = [...Map.groupBy(registry.list(), (def) => def.domain)].map(
-    ([domain, defs]) => `## ${domain}\n${defs.map((def) => entry(signature(def), firstSentence(def.description))).join('\n')}`,
+    ([domain, defs]) => `## ${domain}\n${defs.map((def) => entry(opSignature(def), firstSentence(def.description))).join('\n')}`,
   );
   return ['Ops by domain. A trailing ? marks an optional field; guide topic "op:<name>" shows one op in full.', ...sections].join('\n\n');
 }
