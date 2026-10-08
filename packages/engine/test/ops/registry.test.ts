@@ -139,6 +139,12 @@ describe('ops/registry: executeBatch', () => {
     expect(JSON.stringify(bad.results[0])).toContain('palette.primary');
   });
 
+  it('a token holding a bad color is named as such, not as a missing token', () => {
+    const doc: Doc = { ...fresh(), tokens: { brand: 'not-a-color' } };
+    const r = executeBatch(registry, doc, [{ op: 'box', x: 0, y: 0, size: 5, fill: 'brand' }]);
+    expect(r.results[0]).toMatchObject({ error: { code: 'invalid_color', message: 'token "brand" holds "not-a-color", which is not a color' } });
+  });
+
   it('an unknown op gets a did-you-mean hint', () => {
     const r = executeBatch(registry, fresh(), [{ op: 'bx' }]);
     expect(JSON.stringify(r.results[0])).toContain('\\"box\\"');

@@ -101,6 +101,9 @@ export type BatchOptions = { readonly dryRun?: boolean; readonly lastCreated?: s
 
 function paintError(doc: Doc, value: string): EngineError {
   const tokens = Object.keys(doc.tokens);
+  if (Object.hasOwn(doc.tokens, value)) {
+    return new EngineError('invalid_color', `token "${value}" holds "${doc.tokens[value]}", which is not a color`, 'Give the token a CSS color value, or use a color directly.');
+  }
   return new EngineError(
     'invalid_color',
     `"${value}" is not a color or a token`,

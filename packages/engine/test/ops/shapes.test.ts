@@ -68,6 +68,21 @@ describe('ops/shapes', () => {
     expect(bad.results[1]).toMatchObject({ error: { code: 'invalid_structure' } });
   });
 
+  it('a shape inside a transformed group still takes canvas coordinates', () => {
+    const doc = docOf([groupNode('house', [], { transform: [2, 0, 0, 2, 100, 50] })]);
+    const r = run(
+      [
+        { op: 'rect', id: 'r', parent: 'house', x: 10, y: 10, width: 10, height: 10 },
+        { op: 'rect', id: 'w', parent: 'house', x: 0, y: 0, width: '100%', height: 5 },
+      ],
+      doc,
+    );
+    expect(r.results[0]).toMatchObject({ bounds: { x: 10, y: 10, width: 10, height: 10 } });
+    expect(r.results[1]).toMatchObject({ bounds: { x: 0, y: 0, width: 800, height: 5 } });
+    const flat = run([{ op: 'rect', parent: 'flat', x: 0, y: 0, width: 5, height: 5 }], docOf([groupNode('flat', [], { transform: [0, 0, 0, 0, 0, 0] })]));
+    expect(flat.results[0]).toMatchObject({ error: { code: 'invalid_structure' } });
+  });
+
   it('every shape example runs on an empty canvas', () => {
     for (const def of registry.list()) {
       for (const example of def.examples) {

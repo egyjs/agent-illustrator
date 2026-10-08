@@ -71,13 +71,17 @@ function pathData(subpaths: readonly Subpath[], n: Fmt): string {
   return out.join(' ');
 }
 
-/** Presentation attributes in a fixed order. Paints that do not resolve are left out. */
+/**
+ * Presentation attributes in a fixed order. A paint that no longer resolves (say, a deleted token)
+ * draws nothing: fill becomes "none" rather than SVG's default black, and stroke is left out.
+ */
 function styleAttrs(doc: Doc, s: Style, n: Fmt): string[] {
   const out: string[] = [];
   const paint = (name: string, value: string | undefined) => {
     if (value === undefined) return;
     const color = resolvePaint(doc, value);
     if (color !== undefined) out.push(`${name}="${color}"`);
+    else if (name === 'fill') out.push('fill="none"');
   };
   paint('fill', s.fill);
   if (s.fillOpacity !== undefined) out.push(`fill-opacity="${n(s.fillOpacity)}"`);

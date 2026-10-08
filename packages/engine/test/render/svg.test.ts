@@ -57,8 +57,8 @@ describe('render/svg', () => {
     expect(toSvg(odd)).toBe(`${HEAD}<path id="a" d="M0 0 L10 0 L10 10 L0 10 Z" fill-rule="evenodd" fill="#e76f51" stroke="rgba(0, 0, 0, 0.25)"/></svg>`);
   });
 
-  it('prints negative zero as 0 and leaves out paints that no longer resolve', () => {
-    const doc = docOf([pathNode('p', [{ start: [-0.0001, 0], segs: [[5, 0, 5, 0, 5, 0]], closed: false }], { style: { fill: 'palette.gone' } })]);
-    expect(toSvg(doc)).toBe('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><path id="p" d="M0 0 L5 0"/></svg>');
+  it('prints negative zero as 0; a fill that no longer resolves becomes none, not black', () => {
+    const doc = docOf([pathNode('p', [{ start: [-0.0001, 0], segs: [[5, 0, 5, 0, 5, 0]], closed: false }], { style: { fill: 'palette.gone', stroke: 'palette.gone' } })]);
+    expect(toSvg(doc)).toBe('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><path id="p" d="M0 0 L5 0" fill="none"/></svg>');
   });
 });

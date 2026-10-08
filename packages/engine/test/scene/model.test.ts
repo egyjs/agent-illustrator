@@ -55,6 +55,9 @@ describe('scene/model: validateDocument', () => {
     ['an unknown schema version', { ...valid, schema: 2 }],
     ['an unusable id', { ...valid, root: ['g'], nodes: { ...valid.nodes, constructor: pathNode('constructor', []) } }],
     ['an unknown style key', { ...valid, nodes: { ...valid.nodes, p: { ...valid.nodes.p!, style: { color: 'red' } } } }],
+    ['a token that is not a color', { ...valid, tokens: { brand: 'not-a-color' } }],
+    ['a fill that is neither a color nor a token', { ...valid, nodes: { ...valid.nodes, p: { ...valid.nodes.p!, style: { fill: 'blurple' } } } }],
+    ['a background that does not resolve', { ...valid, canvas: { width: 800, height: 600, background: 'palette.bg' } }],
   ])('rejects %s', (_, doc) => {
     expectCode(() => validateDocument(doc), 'invalid_document');
   });

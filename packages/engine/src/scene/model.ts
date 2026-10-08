@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { EngineError } from '../errors.ts';
 import type { FillRule, Mat6, Subpath } from '../geometry/types.ts';
-import { toSvgColor } from './color.ts';
+import { resolvePaint, toSvgColor } from './color.ts';
 
 /** Semantic ids double as SVG ids: a letter or "_", then letters, digits, "_", "." or "-"; at most 64 characters. */
 export const ID_PATTERN = /^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/;
@@ -154,9 +154,24 @@ export function validateDocument(json: unknown): Doc {
   const hint = 'Load a document saved by this engine; edits by hand must keep its schema.';
   if (!parsed.success) throw new EngineError('invalid_document', z.prettifyError(parsed.error), hint);
   const doc = parsed.data as Doc;
-  const problem = integrityProblem(doc);
+  const problem = integrityProblem(doc) ?? paintProblem(doc);
   if (problem) throw new EngineError('invalid_document', problem, hint);
   return doc;
+}
+
+/** The first token value that is not a color, or paint that is neither a color nor a token; or null. */
+function paintProblem(doc: Doc): string | null {
+  for (const [name, value] of Object.entries(doc.tokens)) {
+    if (toSvgColor(value) === undefined) return `token "${name}" holds "${value}", which is not a color`;
+  }
+  const bad = (paint: string | undefined) => paint !== undefined && resolvePaint(doc, paint) === undefined;
+  if (bad(doc.canvas.background)) return `background "${doc.canvas.background}" is not a color or a token`;
+  for (const node of Object.values(doc.nodes)) {
+    for (const key of ['fill', 'stroke'] as const) {
+      if (bad(node.style[key])) return `${key} "${node.style[key]}" of "${node.id}" is not a color or a token`;
+    }
+  }
+  return null;
 }
 
 /**

@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { EngineError } from '../errors.ts';
 import { ellipse as ellipsePath, polyline, roundCorners } from '../geometry/paths.ts';
-import { cosSinDeg, IDENTITY } from '../geometry/transform.ts';
-import type { Subpath, Vec2 } from '../geometry/types.ts';
+import { cosSinDeg, IDENTITY, invert } from '../geometry/transform.ts';
+import type { Mat6, Subpath, Vec2 } from '../geometry/types.ts';
 import { StyleSchema, type PathNode, type Style } from '../scene/model.ts';
+import { worldTransform } from '../scene/query.ts';
 import { insertNode } from '../scene/store.ts';
 import { defineOp, Length, type OpContext } from './registry.ts';
 
@@ -17,11 +18,22 @@ function positive(op: string, name: string, v: number): number {
   return v;
 }
 
-/** Inserts a new path node (on top of its parent or the canvas) and returns its id. */
+const isIdentity = (m: Mat6) => m.every((v, i) => v === IDENTITY[i]);
+
+/**
+ * Inserts a new path node (on top of its parent or the canvas) and returns its id. Coordinates are
+ * canvas units even inside a transformed group: the node gets the inverse of the parent's world
+ * matrix, so it lands where the numbers say and still moves with the group afterwards.
+ */
 function addPath(ctx: OpContext, input: Common, prefix: string, subpaths: Subpath[], source: Record<string, unknown>, defaults: Style = {}): string {
   const parent = input.parent === undefined ? null : ctx.node(input.parent);
   if (parent && parent.type !== 'group') {
     throw new EngineError('invalid_structure', `parent "${parent.id}" is a ${parent.type}, not a group`, 'Pass a group id as parent, or leave parent out.');
+  }
+  const parentWorld = parent ? worldTransform(ctx.doc, parent.id) : IDENTITY;
+  const transform = isIdentity(parentWorld) ? IDENTITY : invert(parentWorld);
+  if (!transform) {
+    throw new EngineError('invalid_structure', `group "${parent!.id}" is squashed flat (scale 0)`, 'Give that group a non-zero scale before adding to it.');
   }
   const segs = subpaths.reduce((n, sp) => n + sp.segs.length, 0);
   if (segs > ctx.limits.maxSegmentsPerPath) {
@@ -29,7 +41,7 @@ function addPath(ctx: OpContext, input: Common, prefix: string, subpaths: Subpat
   }
   const style = ctx.style({ ...defaults, ...input.style });
   const id = ctx.newId(input.id, prefix);
-  const node: PathNode = { id, type: 'path', parent: parent?.id ?? null, transform: IDENTITY, style, fillRule: 'nonzero', subpaths, meta: { source } };
+  const node: PathNode = { id, type: 'path', parent: parent?.id ?? null, transform, style, fillRule: 'nonzero', subpaths, meta: { source } };
   ctx.update((d) => insertNode(d, node));
   return id;
 }
