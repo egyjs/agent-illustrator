@@ -56,3 +56,15 @@ export function polylineLength(c: Cubic, steps: number): number {
   }
   return total;
 }
+
+/** Distance from p to the closest point of a polyline. */
+export function distanceToPolyline(p: Vec2, pts: readonly Vec2[]): number {
+  let best = Infinity;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [ax, ay] = pts[i]!, [bx, by] = pts[i + 1]!;
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / len2)) : 0;
+    best = Math.min(best, Math.hypot(p[0] - ax - t * dx, p[1] - ay - t * dy));
+  }
+  return best;
+}
