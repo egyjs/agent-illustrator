@@ -6,11 +6,14 @@ A packaged guide and prompt teach any tool-calling model the workflow: plan, blo
 
 ## Install
 
-Requires Node.js 22.18 or newer. No native build step.
+Requires Node.js 22.18 or newer and pnpm. No native build step. The package is not on npm yet, so build it from source:
 
 ```sh
-npx -y agent-illustrator --doctor   # checks the bundled fonts and content
+pnpm install && pnpm build
+node packages/mcp-server/dist/cli.mjs --doctor   # checks the bundled fonts and content
 ```
+
+In the client configs below, use `node <repo>/packages/mcp-server/dist/cli.mjs` in place of `npx -y agent-illustrator` until it is published.
 
 ## Client setup
 
@@ -74,4 +77,8 @@ pnpm build    # bundle packages/mcp-server/dist
 pnpm smoke    # round trip against the built bundle
 ```
 
-Evaluation: render regression runs in `pnpm test`; the agent-quality harness needs a model and an API key, so run it by hand: `node eval/src/run.ts --model <id>`. See [eval/README.md](eval/README.md).
+Evaluation: render regression runs in `pnpm test`; the agent-quality harness drives Claude Code on your subscription, so run it by hand: `node eval/src/run.ts --model sonnet`. See [eval/README.md](eval/README.md).
+
+## License
+
+[MIT](LICENSE). Bundled Tajawal fonts: SIL Open Font License ([OFL.txt](packages/engine/assets/fonts/OFL.txt)).

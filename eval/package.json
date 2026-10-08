@@ -1,6 +1,7 @@
 {
   "name": "@agent-illustrator/eval",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "description": "Dev-only evaluation (spec A2): render-regression fixtures, agent-quality harness, raw-SVG baseline and report. Never published.",

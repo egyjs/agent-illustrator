@@ -11,5 +11,6 @@ export default defineConfig({
   copy: [
     { from: '../agent-kit/content', to: 'dist/agent-kit' },
     { from: '../engine/assets/fonts', to: 'dist' },
+    { from: '../../LICENSE', to: 'dist' },
   ],
 });

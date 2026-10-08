@@ -1,6 +1,7 @@
 {
   "name": "agent-illustrator",
   "version": "1.0.0",
+  "license": "MIT",
   "description": "Vector illustration engine for LLM agents, served over MCP.",
   "type": "module",
   "bin": { "agent-illustrator": "./dist/cli.mjs" },

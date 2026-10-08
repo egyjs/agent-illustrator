@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- MIT license (`LICENSE`, `license` fields; the built bundle carries it in `dist/`).
+- CI: `pnpm/action-setup@v6` (Node 24); build runs before tests so the eval server tests run in CI.
+- README: install from source until the package is on npm.
+
 ## 1.0.0 (2026-10-08)
 
 First release: a vector illustration engine for LLM agents, served over MCP stdio.

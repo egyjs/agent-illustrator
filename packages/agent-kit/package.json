@@ -1,6 +1,7 @@
 {
   "name": "@agent-illustrator/agent-kit",
   "version": "1.0.0",
+  "license": "MIT",
   "private": true,
   "files": ["content"]
 }
