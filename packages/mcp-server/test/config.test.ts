@@ -11,6 +11,7 @@ describe('loadConfig', () => {
       maxDocuments: 50,
       maxRenderPixels: MAX_RENDER_PIXELS,
       renderDir: join(tmpdir(), 'agent-illustrator'),
+      docsDir: join(tmpdir(), 'agent-illustrator', 'docs'),
       logLevel: 'info',
     });
   });

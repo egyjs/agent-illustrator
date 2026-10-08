@@ -8,6 +8,8 @@ export type ServerConfig = {
   readonly maxRenderPixels: number;
   /** Where render PNGs are also written, for clients that drop image blocks (FR-11.2). */
   readonly renderDir: string;
+  /** The only directory `document_io` reads and writes; files are named by the model, never pathed (FR-12.2). */
+  readonly docsDir: string;
   readonly logLevel: string;
 };
 
@@ -34,6 +36,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     maxDocuments: int('MAX_DOCUMENTS', 50),
     maxRenderPixels: int('MAX_RENDER_PIXELS', MAX_RENDER_PIXELS),
     renderDir: env.AGENT_ILLUSTRATOR_RENDER_DIR || join(tmpdir(), 'agent-illustrator'),
+    docsDir: env.AGENT_ILLUSTRATOR_DOCS_DIR || join(tmpdir(), 'agent-illustrator', 'docs'),
     logLevel,
   };
 }

@@ -25,13 +25,13 @@ export type ToolDeps = {
   readonly fonts: RasterFonts;
   readonly log: Logger;
 };
-type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: 'image/png' };
+export type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: 'image/png' };
 export type ToolResult = { content: Content[]; isError?: boolean };
 
-const text = (value: unknown): Content => ({ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) });
+export const text = (value: unknown): Content => ({ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) });
 
 /** Runs a tool body; engine errors and surprises both come back as isError results the model can act on. */
-function guarded(deps: ToolDeps, tool: string, body: () => ToolResult): ToolResult {
+export function guarded(deps: ToolDeps, tool: string, body: () => ToolResult): ToolResult {
   try {
     return body();
   } catch (e) {
@@ -48,14 +48,14 @@ function guarded(deps: ToolDeps, tool: string, body: () => ToolResult): ToolResu
  * Validates tool input in the handler, not in the SDK, so every mistake gets the same
  * { code, message, hint } shape as engine errors and shows up in the logs (NFR-3, NFR-5).
  */
-function parse<S extends z.ZodType>(schema: S, input: unknown, tool: string, example: unknown): z.output<S> {
+export function parse<S extends z.ZodType>(schema: S, input: unknown, tool: string, example: unknown): z.output<S> {
   const r = schema.safeParse(input);
   if (!r.success) throw new EngineError('invalid_input', `${tool}: ${z.prettifyError(r.error)}`, `Example: ${JSON.stringify(example)}`);
   return r.data;
 }
 
-const round = (v: number) => Math.round(v * 100) / 100;
-const roundBox = (b: Box) => ({ x: round(b.x), y: round(b.y), width: round(b.width), height: round(b.height) });
+export const round = (v: number): number => Math.round(v * 100) / 100;
+export const roundBox = (b: Box) => ({ x: round(b.x), y: round(b.y), width: round(b.width), height: round(b.height) });
 
 /** What the model sees for one op: no empty warnings, bounds rounded to 0.01. */
 function compact(o: OpOutcome): Record<string, unknown> {

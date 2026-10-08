@@ -59,6 +59,7 @@ Set with environment variables. Exceeding a limit returns an error that says whi
 | `AGENT_ILLUSTRATOR_MAX_DOCUMENTS` (open documents per server) | 50 |
 | `AGENT_ILLUSTRATOR_MAX_RENDER_PIXELS` | 16777216 (4096²) |
 | `AGENT_ILLUSTRATOR_RENDER_DIR` (PNG copies) | `<os tmp>/agent-illustrator` |
+| `AGENT_ILLUSTRATOR_DOCS_DIR` (`document_io` saves and loads) | `<os tmp>/agent-illustrator/docs` |
 | `AGENT_ILLUSTRATOR_LOG_LEVEL` (stderr JSON logs) | `info` |
 
 Heavy work (booleans, renders) runs synchronously and is bounded by these caps rather than by timeouts.

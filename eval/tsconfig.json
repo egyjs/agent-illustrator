@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": ["src", "test", "../packages/engine/src/geometry/paper-shim.d.ts", "../packages/engine/src/analysis/rbush-shim.d.ts"]
+}
