@@ -68,6 +68,15 @@ type Text  = Base & { type: 'text'; content: string; font: FontSpec; anchor: Tex
    - Ids also reject `canvas`, a leading `__`, and Object.prototype names.
    - Paints are CSS colors (via culori), `none`, or token names. SVG output always carries `#rrggbb` or `rgba()`.
    - M4 (2026-10-08): `clip` stores the clip shape's geometry in the node's local space (`{ subpaths, fillRule }`) instead of a node reference; `mask` moves to M5 with gradients.
+8. **Refinements in M5, M6 and M8 (2026-10-08, built together before M7 by owner ruling; plan `2026-10-08-m5-m6-m8-style-generators-text.md`):**
+   - `defs` hold gradients and filters by name. A paint resolves token → gradient def → CSS color; def names never equal a token or a CSS color. Only referenced defs are emitted, so there is no delete op. Documents saved earlier load with `defs: {}`.
+   - Gradients use bounding-box units (linear by `angle`, radial by `center`/`radius`/`focal`). User stops are kept; OKLab midpoints fill the widest gaps up to 5–9 stops. Stop colors may be live tokens.
+   - `style.filter` names a filter def (blur, drop shadow); `style.blend` is a CSS blend mode. Bounds never include strokes or effects.
+   - `mask` is an opacity fade stored on the node (`{ type, angle, from, to }`), not a node reference.
+   - **Deviation from point 4:** a text node stores its measured ink box (`ink`, local space), because measuring needs font files the document does not hold. Ops receive fonts through `BatchOptions.fonts`. Text world bounds are the box around the transformed ink box.
+   - Text on a path copies the guide's first subpath into the node (`at.kind: 'path'`), like clip.
+   - Copy generators (scatter, repeat_along_path, array) emit a group of clones and remove the source unless `keep`. `Limits.maxGenerated` (default 2000) caps one op's copies or samples.
+   - Noise is `simplex-noise@4.0.3`; Alea is hand-written in `random/rng.ts` (point 6).
 
 ## Open suggestions (Pending evidence)
 Record each outcome here with a date and the evidence (spike test name or doc link).
