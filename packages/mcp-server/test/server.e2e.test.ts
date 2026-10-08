@@ -84,15 +84,24 @@ describe('agent-illustrator over stdio', () => {
     expect(body(render)).toMatchObject({ error: { code: 'invalid_input' } });
   }, 30_000);
 
-  it('serves the core contract as instructions and lists four tools with portable schemas', async () => {
+  it('serves the core contract as instructions and lists its tools with portable schemas', async () => {
     expect(client.getInstructions()).toContain('apply_ops');
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['apply_ops', 'create_document', 'export_svg', 'render']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['apply_ops', 'create_document', 'export_svg', 'guide', 'render']);
     const ops = tools.find((t) => t.name === 'apply_ops')!;
     expect(JSON.stringify(ops.inputSchema)).toContain('"additionalProperties":true');
     expect(ops.description).toContain('rect(');
     for (const tool of tools) expect(JSON.stringify(tool.inputSchema)).not.toMatch(/\$ref|\$defs|"oneOf"|"anyOf"/);
   });
+
+  it('serves the guide index and the illustrate prompt from the agent kit', async () => {
+    const index = await client.callTool({ name: 'guide', arguments: {} });
+    expect((index.content as Block[])[0]!.text).toContain('workflow');
+    const { prompts } = await client.listPrompts();
+    expect(prompts.map((p) => p.name)).toEqual(['illustrate']);
+    const prompt = await client.getPrompt({ name: 'illustrate', arguments: { brief: 'a red fox at dusk' } });
+    expect(JSON.stringify(prompt.messages)).toContain('a red fox at dusk');
+  }, 30_000);
 
   it('draws, renders and exports a small scene end to end', async () => {
     const created = body(await client.callTool({ name: 'create_document', arguments: { width: 400, height: 300, background: '#ffffff', seed: 1 } }));

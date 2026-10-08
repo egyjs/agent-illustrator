@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /** Files the published package must carry; `--doctor` checks each one. */
-export const REQUIRED_AGENT_KIT_FILES = ['core-contract.md', 'guides/README.md'] as const;
+export const REQUIRED_AGENT_KIT_FILES = ['core-contract.md', 'workflow.md', 'prompts/illustrate.md'] as const;
 
 /**
  * Directory holding agent-kit content.

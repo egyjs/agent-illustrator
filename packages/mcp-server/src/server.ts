@@ -1,6 +1,8 @@
 import { fromJsonSchema, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
+import type { AgentKit } from './agent-kit.ts';
+import { guideInput, guideTool, illustrateArgs, illustratePrompt } from './guide-tool.ts';
 import {
   applyOpsInputSchema,
   applyOpsTool,
@@ -38,8 +40,8 @@ function logged(deps: ToolDeps, tool: string, input: unknown, run: () => ToolRes
   return result;
 }
 
-export function createServer(deps: ToolDeps, instructions: string): McpServer {
-  const server = new McpServer({ name: 'agent-illustrator', version: pkg.version }, { instructions });
+export function createServer(deps: ToolDeps, kit: AgentKit): McpServer {
+  const server = new McpServer({ name: 'agent-illustrator', version: pkg.version }, { instructions: kit.instructions });
 
   server.registerTool(
     'create_document',
@@ -88,6 +90,32 @@ export function createServer(deps: ToolDeps, instructions: string): McpServer {
     },
     async (input) => logged(deps, 'export_svg', input, () => exportSvgTool(deps, input)),
   );
+
+  server.registerTool(
+    'guide',
+    {
+      title: 'Guide',
+      description:
+        'Read the drawing guides: the workflow, topic guides, style presets and the op reference. Call it with no topic for the index, and read the ' +
+        'matching topic before using an unfamiliar op ("ops" lists them all, "op:<name>" shows one in full).',
+      inputSchema: advertise(z.toJSONSchema(guideInput)),
+      annotations: { readOnlyHint: true },
+    },
+    async (input) => logged(deps, 'guide', input, () => guideTool(deps, kit, input)),
+  );
+
+  const { prompt } = kit;
+  if (prompt !== undefined) {
+    server.registerPrompt(
+      'illustrate',
+      {
+        title: 'Illustrate',
+        description: 'Draw an illustration from a brief with the workflow in the guide: plan, block in, detail, critique, export.',
+        argsSchema: illustrateArgs,
+      },
+      (args) => illustratePrompt(kit, prompt, args),
+    );
+  }
 
   return server;
 }
