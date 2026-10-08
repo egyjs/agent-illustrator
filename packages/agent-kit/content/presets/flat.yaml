@@ -1,0 +1,27 @@
+name: flat
+description: Flat vector style with solid fills, no outlines, a small palette and layered depth.
+canvas:
+  width: 1200
+  height: 800
+  background: "#f4f1de"
+palette:
+  harmony: complementary
+  steps: 5
+  background: palette.neutral.1
+  accent: one color on the focal point only
+defaults:
+  shape: { fill: palette.primary.3 }
+  outline: { fill: none, stroke: palette.primary.5, strokeWidth: 2, strokeCap: round, strokeJoin: round }
+  accent: { fill: palette.accent }
+  text: { fill: palette.neutral.5 }
+shadows:
+  shadow: { dx: 0, dy: 6, blur: 10, color: "rgba(0,0,0,0.2)" }
+rules:
+  - Solid fills only; add outlines just for small details that would vanish otherwise.
+  - Use palette tokens, at most five colors, and the accent on the focal point only.
+  - Build from simple shapes (rect, ellipse, polygon, wave, blob) and skip details under 8 units.
+  - Show depth by layering and lightness: far shapes lighter and calmer, near shapes darker.
+  - Shade an object with one or two extra flat shapes, not gradients; allow a gradient only in the sky or background.
+  - Give a soft shadow to the focal point only, using the shadows filter.
+  - Keep generous empty space and align elements with place, align and distribute.
+  - Text is bold, large and passes the contrast check.

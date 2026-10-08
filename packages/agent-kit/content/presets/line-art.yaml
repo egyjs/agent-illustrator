@@ -1,0 +1,26 @@
+name: line-art
+description: Monoline illustration made of strokes with no fills, one ink color on a light page.
+canvas:
+  width: 1000
+  height: 1000
+  background: "#fdfcf8"
+palette:
+  harmony: complementary
+  steps: 5
+  background: palette.neutral.1
+  accent: one highlight stroke at most
+defaults:
+  shape: { fill: none, stroke: palette.neutral.5, strokeWidth: 4, strokeCap: round, strokeJoin: round }
+  outline: { fill: none, stroke: palette.neutral.5, strokeWidth: 6, strokeCap: round, strokeJoin: round }
+  accent: { fill: none, stroke: palette.accent, strokeWidth: 4, strokeCap: round, strokeJoin: round }
+  text: { fill: palette.neutral.5 }
+shadows: none
+rules:
+  - Set fill to none on every shape; the page color is the only filled area.
+  - Use one ink color and two or three stroke widths: main outline 6, details 4, texture 2.
+  - Round caps and joins on every stroke.
+  - To hide what is behind a shape, fill it with the page color rather than a new color.
+  - Use strokeDash for secondary or hidden lines, for example [10, 8].
+  - Close outlines so shapes read as shapes; check ends and corners on a zoomed render.
+  - No shadows and no gradients. Suggest depth with line weight and overlap.
+  - A little roughen (amount 1 to 2) gives a hand-drawn feel; checkpoint before using it.

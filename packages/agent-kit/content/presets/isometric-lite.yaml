@@ -1,0 +1,27 @@
+name: isometric-lite
+description: Light isometric look with 30 degree edges, three face shades per solid and a soft ground shadow.
+canvas:
+  width: 1000
+  height: 800
+  background: "#f1faee"
+palette:
+  harmony: complementary
+  steps: 5
+  background: palette.neutral.1
+  accent: one solid in a second color at most
+defaults:
+  shape: { fill: palette.primary.3 }
+  outline: { fill: none }
+  accent: { fill: palette.accent }
+  text: { fill: palette.neutral.5 }
+shadows:
+  blur: 14
+rules:
+  - A solid is a group of three faces: top, left and right. Move the group, never single faces.
+  - Top face is a polygon with 4 sides, then transform scale [1, 0.577] with pivot center.
+  - Left face is a rect, then transform skew [0, 30] with pivot top-left. Right face is a rect with skew [0, -30], pivot top-left.
+  - Shade from one ramp with light from above: top palette.primary.2, right .3, left .4.
+  - Keep one unit for width, depth and height; parallel edges stay parallel, with no perspective shrink.
+  - No outlines. Separate solids with shade, not strokes.
+  - Draw the ground shadow first as a flat ellipse at 25 percent opacity with the shadows filter, under the solid.
+  - Stack and line up solids with place and align on the face bounds.
