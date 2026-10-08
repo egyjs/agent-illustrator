@@ -19,6 +19,7 @@ function groupLook(doc: Doc, group: GroupNode): Style {
   const firstPainted = (node: SceneNode, above: Style): Style | undefined => {
     const style = inherit(above, node.style);
     if (node.type === 'path') return paints(style) ? style : undefined;
+    if (node.type === 'text') return undefined;
     for (const child of node.children) {
       const hit = firstPainted(requireNode(doc, child), style);
       if (hit) return hit;
@@ -67,7 +68,7 @@ export const boolean = defineOp({
     }
     if (acc.subpaths.length === 0) ctx.warn('empty_result', `${input.mode} of ${ids.join(', ')} covers no area`);
     const keep = input.keep ?? false;
-    const style = ctx.style(input.style ?? (first.type === 'path' ? first.style : groupLook(ctx.doc, first)));
+    const style = ctx.style(input.style ?? (first.type === 'group' ? groupLook(ctx.doc, first) : first.style));
     const consumed = new Set(keep ? [] : ids);
     const id = ctx.newId(input.id, 'boolean', { releasing: consumed, quiet: input.id !== undefined && consumed.has(input.id) });
     const list = siblings(ctx.doc, first);

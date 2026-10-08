@@ -55,6 +55,7 @@ Set with environment variables. Exceeding a limit returns an error that says whi
 | `AGENT_ILLUSTRATOR_MAX_OPS` (ops per batch) | 200 |
 | `AGENT_ILLUSTRATOR_MAX_NODES` (nodes per document) | 5000 |
 | `AGENT_ILLUSTRATOR_MAX_SEGMENTS` (segments per path) | 20000 |
+| `AGENT_ILLUSTRATOR_MAX_GENERATED` (copies or samples per generator op) | 2000 |
 | `AGENT_ILLUSTRATOR_MAX_DOCUMENTS` (open documents per server) | 50 |
 | `AGENT_ILLUSTRATOR_MAX_RENDER_PIXELS` | 16777216 (4096²) |
 | `AGENT_ILLUSTRATOR_RENDER_DIR` (PNG copies) | `<os tmp>/agent-illustrator` |

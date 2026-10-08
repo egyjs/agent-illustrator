@@ -126,6 +126,7 @@ export function applyOpsTool(deps: ToolDeps, raw: unknown): ToolResult {
       dryRun: input.dry_run ?? false,
       lastCreated: session.lastCreated,
       limits: deps.config.limits,
+      fonts: deps.fonts,
     });
     if (result.committed) {
       session.store.commit(result.doc);

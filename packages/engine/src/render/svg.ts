@@ -1,12 +1,15 @@
 import { isStraight } from '../geometry/bezier.ts';
 import { IDENTITY } from '../geometry/transform.ts';
 import type { Mat6, Subpath } from '../geometry/types.ts';
-import { resolvePaint } from '../scene/color.ts';
+import { defSvgId, resolvePaint } from '../scene/color.ts';
 import type { Doc, Style } from '../scene/model.ts';
+import { defsMarkup, maskMarkup, maskSvgId } from './defs-svg.ts';
+import { textMarkup } from './text-svg.ts';
 
 export type SvgOptions = { readonly precision?: number };
 
-type Fmt = (v: number) => string;
+/** Formats a number for SVG output at a fixed precision. */
+export type Fmt = (v: number) => string;
 
 function formatter(precision: number): Fmt {
   return (v) => {
@@ -26,6 +29,7 @@ export function toSvg(doc: Doc, options: SvgOptions = {}): string {
   const fine = formatter(precision + 3);
   const { width, height, background } = doc.canvas;
   const parts = [`<svg xmlns="http://www.w3.org/2000/svg" width="${n(width)}" height="${n(height)}" viewBox="0 0 ${n(width)} ${n(height)}">`];
+  parts.push(defsMarkup(doc, n));
   const bg = background === undefined ? undefined : resolvePaint(doc, background);
   if (bg !== undefined && bg !== 'none') parts.push(`<rect width="${n(width)}" height="${n(height)}" fill="${bg}"/>`);
   for (const id of doc.root) parts.push(element(doc, id, n, fine));
@@ -36,10 +40,12 @@ export function toSvg(doc: Doc, options: SvgOptions = {}): string {
 function element(doc: Doc, id: string, n: Fmt, fine: Fmt): string {
   const node = doc.nodes[id]!;
   const attrs = [`id="${node.id}"`];
+  const text = node.type === 'text' ? textMarkup(node, n) : undefined;
   if (node.type === 'path') {
     attrs.push(`d="${pathData(node.subpaths, n)}"`);
     if (node.fillRule === 'evenodd') attrs.push('fill-rule="evenodd"');
   }
+  if (text) attrs.push(...text.attrs);
   if (!isIdentity(node.transform)) {
     const [a, b, c, d, e, f] = node.transform;
     attrs.push(`transform="matrix(${[a, b, c, d].map(fine).join(' ')} ${n(e)} ${n(f)})"`);
@@ -50,8 +56,13 @@ function element(doc: Doc, id: string, n: Fmt, fine: Fmt): string {
     prefix = `<clipPath id="__clip_${node.id}"><path d="${pathData(node.clip.subpaths, n)}"${rule}/></clipPath>`;
     attrs.push(`clip-path="url(#__clip_${node.id})"`);
   }
+  if (node.mask) {
+    prefix += maskMarkup(node.id, node.mask, n);
+    attrs.push(`mask="url(#${maskSvgId(node.id)})"`);
+  }
   attrs.push(...styleAttrs(doc, node.style, n));
   if (node.type === 'path') return `${prefix}<path ${attrs.join(' ')}/>`;
+  if (node.type === 'text') return `${prefix}${text!.prefix}<text ${attrs.join(' ')}>${text!.body}</text>`;
   const children = node.children.map((child) => element(doc, child, n, fine)).join('');
   return children === '' ? `${prefix}<g ${attrs.join(' ')}/>` : `${prefix}<g ${attrs.join(' ')}>${children}</g>`;
 }
@@ -59,7 +70,7 @@ function element(doc: Doc, id: string, n: Fmt, fine: Fmt): string {
 const isIdentity = (m: Mat6) => m === IDENTITY || m.every((v, i) => v === IDENTITY[i]);
 
 /** M/L/C/Z path data. Straight segments print as L; a straight closing segment is left to Z. */
-function pathData(subpaths: readonly Subpath[], n: Fmt): string {
+export function pathData(subpaths: readonly Subpath[], n: Fmt): string {
   const out: string[] = [];
   for (const sp of subpaths) {
     if (sp.segs.length === 0) continue;
@@ -99,5 +110,8 @@ function styleAttrs(doc: Doc, s: Style, n: Fmt): string[] {
   if (s.miterLimit !== undefined) out.push(`stroke-miterlimit="${n(s.miterLimit)}"`);
   if (s.strokeOpacity !== undefined) out.push(`stroke-opacity="${n(s.strokeOpacity)}"`);
   if (s.opacity !== undefined) out.push(`opacity="${n(s.opacity)}"`);
+  const filter = s.filter === undefined || !Object.hasOwn(doc.defs, s.filter) ? undefined : doc.defs[s.filter];
+  if (filter?.kind === 'filter') out.push(`filter="url(#${defSvgId(s.filter!)})"`);
+  if (s.blend !== undefined && s.blend !== 'normal') out.push(`style="mix-blend-mode:${s.blend}"`);
   return out;
 }

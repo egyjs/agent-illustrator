@@ -15,6 +15,7 @@
     "paper": "catalog:",
     "pino": "catalog:",
     "rbush": "catalog:",
+    "simplex-noise": "catalog:",
     "svgo": "catalog:",
     "zod": "catalog:"
   },

@@ -19,6 +19,7 @@ export function docOf(nodes: SceneNode[], root?: string[]): Doc {
     seed: 1,
     canvas: { width: 800, height: 600 },
     tokens: {},
+    defs: {},
     nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
     root: root ?? nodes.filter((n) => n.parent === null).map((n) => n.id),
   };

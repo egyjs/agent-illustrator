@@ -5,6 +5,7 @@ import type { Box } from '../geometry/types.ts';
 import { resolvePaint } from '../scene/color.ts';
 import { isValidId, type Doc, type SceneNode, type Style } from '../scene/model.ts';
 import { getNode, requireNode, worldBounds } from '../scene/query.ts';
+import type { RasterFonts } from '../render/raster.ts';
 
 /** A coordinate or length: canvas units, or a percent string such as "50%" (FR-2.1). */
 export const Length = z.union([z.number(), z.string().regex(/^-?\d+(\.\d+)?%$/, 'expected a number or a percent string such as "50%"')]);
@@ -13,15 +14,24 @@ export type Length = z.output<typeof Length>;
 export type Axis = 'x' | 'y' | 'min';
 
 export type Warning = { readonly code: string; readonly message: string };
-export type OpResult = { readonly id?: string; readonly ids?: readonly string[] };
+/** `data` carries results that are not nodes (token values, def names, text metrics) back to the caller. */
+export type OpResult = { readonly id?: string; readonly ids?: readonly string[]; readonly data?: Readonly<Record<string, unknown>> };
 
-export type Limits = { readonly maxOpsPerBatch: number; readonly maxNodes: number; readonly maxSegmentsPerPath: number };
-export const DEFAULT_LIMITS: Limits = { maxOpsPerBatch: 200, maxNodes: 5000, maxSegmentsPerPath: 20_000 };
+export type Limits = {
+  readonly maxOpsPerBatch: number;
+  readonly maxNodes: number;
+  readonly maxSegmentsPerPath: number;
+  /** Most copies or samples one generator op may make (scatter, repeat_along_path, array). */
+  readonly maxGenerated: number;
+};
+export const DEFAULT_LIMITS: Limits = { maxOpsPerBatch: 200, maxNodes: 5000, maxSegmentsPerPath: 20_000, maxGenerated: 2000 };
 
 /** What a handler sees. `doc` is frozen and always current; changes go through `update`. */
 export interface OpContext {
   readonly doc: Doc;
   readonly limits: Limits;
+  /** Font files for measuring text; without them, system fonts are used. */
+  readonly fonts: RasterFonts | undefined;
   /** Applies an immer recipe; `doc` reflects it right away. */
   update(recipe: (draft: Draft<Doc>) => void): void;
   /** Resolves an id or "$last" to a node; throws unknown_id or invalid_reference. */
@@ -36,7 +46,7 @@ export interface OpContext {
   last: string | undefined;
   /** Canvas units from a number or a percent of the canvas width (x), height (y) or smaller side (min). */
   len(v: Length, axis: Axis): number;
-  /** Checks every paint in the style (a color or an existing token) and drops undefined keys. */
+  /** Checks every paint in the style (a color, a token or a gradient def) and the filter def, and drops undefined keys. */
   style(s: Style | undefined): Style;
   warn(code: string, message: string): void;
 }
@@ -90,6 +100,7 @@ type Done = {
   readonly bounds?: Box | null;
   /** Exact world bounds of each returned id that still exists. */
   readonly boundsById?: Readonly<Record<string, Box | null>>;
+  readonly data?: Readonly<Record<string, unknown>>;
   readonly warnings: readonly Warning[];
 };
 
@@ -108,17 +119,18 @@ export type BatchResult = {
   readonly lastCreated?: string;
 };
 
-export type BatchOptions = { readonly dryRun?: boolean; readonly lastCreated?: string; readonly limits?: Partial<Limits> };
+export type BatchOptions = { readonly dryRun?: boolean; readonly lastCreated?: string; readonly limits?: Partial<Limits>; readonly fonts?: RasterFonts };
 
 function paintError(doc: Doc, value: string): EngineError {
   const tokens = Object.keys(doc.tokens);
+  const gradients = Object.keys(doc.defs).filter((k) => doc.defs[k]!.kind !== 'filter');
   if (Object.hasOwn(doc.tokens, value)) {
     return new EngineError('invalid_color', `token "${value}" holds "${doc.tokens[value]}", which is not a color`, 'Give the token a CSS color value, or use a color directly.');
   }
   return new EngineError(
     'invalid_color',
-    `"${value}" is not a color or a token`,
-    `Use a CSS color such as "#2a9d8f", "teal" or "rgb(42 157 143)", or "none"${tokens.length > 0 ? `, or a token: ${tokens.slice(0, 10).join(', ')}` : ''}.`,
+    `"${value}" is not a color, a token or a gradient`,
+    `Use a CSS color such as "#2a9d8f", "teal" or "rgb(42 157 143)", or "none"${tokens.length > 0 ? `, or a token: ${tokens.slice(0, 10).join(', ')}` : ''}${gradients.length > 0 ? `, or a gradient: ${gradients.slice(0, 10).join(', ')}` : ''}.`,
   );
 }
 
@@ -126,13 +138,15 @@ class Context implements OpContext {
   doc: Doc;
   last: string | undefined;
   readonly limits: Limits;
+  readonly fonts: RasterFonts | undefined;
   readonly warnings: Warning[] = [];
   readonly #claimed = new Set<string>();
 
-  constructor(doc: Doc, last: string | undefined, limits: Limits) {
+  constructor(doc: Doc, last: string | undefined, limits: Limits, fonts: RasterFonts | undefined) {
     this.doc = doc;
     this.last = last;
     this.limits = limits;
+    this.fonts = fonts;
   }
 
   update(recipe: (draft: Draft<Doc>) => void): void {
@@ -185,6 +199,14 @@ class Context implements OpContext {
       if (value === undefined) continue;
       if ((key === 'fill' || key === 'stroke') && resolvePaint(this.doc, value as string) === undefined) {
         throw paintError(this.doc, value as string);
+      }
+      if (key === 'filter' && this.doc.defs[value as string]?.kind !== 'filter') {
+        const filters = Object.keys(this.doc.defs).filter((k) => this.doc.defs[k]!.kind === 'filter');
+        throw new EngineError(
+          'invalid_reference',
+          `no filter named "${String(value)}"`,
+          filters.length > 0 ? `Known filters: ${filters.slice(0, 10).join(', ')}.` : 'Create one first with the "filter" op, which can also apply it.',
+        );
       }
       out[key] = value;
     }
@@ -255,7 +277,7 @@ export function executeBatch(registry: Registry, doc: Doc, calls: readonly unkno
   let last = options.lastCreated;
   const done: Done[] = [];
   for (const [i, p] of (parsed as Parsed[]).entries()) {
-    const ctx = new Context(current, last, limits);
+    const ctx = new Context(current, last, limits, options.fonts);
     try {
       const result = p.def.handler(p.input, ctx);
       const count = Object.keys(ctx.doc.nodes).length;
@@ -275,6 +297,7 @@ export function executeBatch(registry: Registry, doc: Doc, calls: readonly unkno
         ...(result.ids === undefined
           ? {}
           : { boundsById: Object.fromEntries(result.ids.filter((x) => Object.hasOwn(current.nodes, x)).map((x) => [x, worldBounds(current, x)])) }),
+        ...(result.data === undefined ? {} : { data: result.data }),
         warnings: ctx.warnings,
       });
     } catch (e) {

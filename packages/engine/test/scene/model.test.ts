@@ -19,6 +19,7 @@ describe('scene/model: createDocument', () => {
       seed: 1,
       canvas: { width: 800, height: 600 },
       tokens: {},
+      defs: {},
       nodes: {},
       root: [],
     });

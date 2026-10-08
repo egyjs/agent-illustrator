@@ -29,6 +29,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       maxOpsPerBatch: int('MAX_OPS', DEFAULT_LIMITS.maxOpsPerBatch),
       maxNodes: int('MAX_NODES', DEFAULT_LIMITS.maxNodes),
       maxSegmentsPerPath: int('MAX_SEGMENTS', DEFAULT_LIMITS.maxSegmentsPerPath),
+      maxGenerated: int('MAX_GENERATED', DEFAULT_LIMITS.maxGenerated),
     },
     maxDocuments: int('MAX_DOCUMENTS', 50),
     maxRenderPixels: int('MAX_RENDER_PIXELS', MAX_RENDER_PIXELS),

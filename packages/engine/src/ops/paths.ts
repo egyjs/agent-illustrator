@@ -69,7 +69,7 @@ export const roundCornersOp = defineOp({
     let clamped = 0, skipped = 0;
     for (const id of ids) {
       const node = ctx.node(id);
-      if (node.type !== 'path') throw new EngineError('invalid_structure', `"${id}" is a group`, 'Round the paths inside the group by their ids.');
+      if (node.type !== 'path') throw new EngineError('invalid_structure', `"${id}" is a ${node.type}, not a path`, 'Round paths only; for a group, round the paths inside it by their ids.');
       const subpaths = node.subpaths.map((sp) => {
         const out = roundCorners(sp, r);
         clamped += out.clamped;

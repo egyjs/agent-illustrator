@@ -42,6 +42,9 @@ catalogs:
     rbush:
       specifier: ^4.0.1
       version: 4.0.1
+    simplex-noise:
+      specifier: 4.0.3
+      version: 4.0.3
     svgo:
       specifier: ^4.1.0
       version: 4.1.0
@@ -103,6 +106,9 @@ importers:
       rbush:
         specifier: 'catalog:'
         version: 4.0.1
+      simplex-noise:
+        specifier: 'catalog:'
+        version: 4.0.3
       svgo:
         specifier: 'catalog:'
         version: 4.1.0
@@ -137,6 +143,9 @@ importers:
       rbush:
         specifier: 'catalog:'
         version: 4.0.1
+      simplex-noise:
+        specifier: 'catalog:'
+        version: 4.0.3
       svgo:
         specifier: 'catalog:'
         version: 4.1.0
@@ -1221,6 +1230,9 @@ packages:
   shebang-regex@3.0.0:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
+
+  simplex-noise@4.0.3:
+    resolution: {integrity: sha512-qSE2I4AngLQG7BXqoZj51jokT4WUXe8mOBrvfOXpci8+6Yu44+/dD5zqDpOx3Ux792eamTd2lLcI8jqFntk/lg==}
 
   sonic-boom@4.2.1:
     resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
@@ -2317,6 +2329,8 @@ snapshots:
       shebang-regex: 3.0.0
 
   shebang-regex@3.0.0: {}
+
+  simplex-noise@4.0.3: {}
 
   sonic-boom@4.2.1:
     dependencies:

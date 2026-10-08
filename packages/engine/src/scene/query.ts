@@ -1,6 +1,6 @@
 import { closest, EngineError } from '../errors.ts';
 import { pathBounds, unionBoxes } from '../geometry/bezier.ts';
-import { applyToSubpaths, IDENTITY, multiply } from '../geometry/transform.ts';
+import { applyToPoint, applyToSubpaths, IDENTITY, multiply } from '../geometry/transform.ts';
 import type { Box, Mat6, Subpath } from '../geometry/types.ts';
 import type { Doc, PathNode, SceneNode } from './model.ts';
 
@@ -52,7 +52,8 @@ const boundsCache = new WeakMap<PathNode, { readonly world: Mat6; readonly box: 
 /**
  * Exact world-space bounds (FR-5.3): control points go through the world matrix, then exact Bézier
  * bounds are taken. Groups union their children. A clip trims the box to the clip's own bounds.
- * Empty groups and empty paths give null. Stroke width is not included.
+ * Empty groups and empty paths give null. Stroke width is not included. Text gives the box around
+ * its transformed ink box (exact unless rotated or skewed).
  */
 export function worldBounds(doc: Doc, id: string): Box | null {
   const node = requireNode(doc, id);
@@ -67,11 +68,19 @@ function unclippedBounds(doc: Doc, node: SceneNode): Box | null {
     return unionBoxes(node.children.map((c) => worldBounds(doc, c)).filter((b): b is Box => b !== null));
   }
   const world = worldTransform(doc, node.id);
+  if (node.type === 'text') return node.ink ? transformBox(world, node.ink) : null;
   const hit = boundsCache.get(node);
   if (hit && sameMatrix(hit.world, world)) return hit.box;
   const box = pathBounds(applyToSubpaths(world, node.subpaths));
   boundsCache.set(node, { world, box });
   return box;
+}
+
+function transformBox(m: Mat6, b: Box): Box {
+  const pts = [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]].map(([x, y]) => applyToPoint(m, [x!, y!]));
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
 }
 
 function intersectBoxes(a: Box, b: Box): Box | null {

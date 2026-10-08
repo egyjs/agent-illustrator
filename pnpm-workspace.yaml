@@ -15,6 +15,7 @@ catalog:
   paper: 0.12.18
   pino: ^10.4.0
   rbush: ^4.0.1
+  simplex-noise: 4.0.3
   typescript-eslint: ^8.71.1
   tsdown: 0.23.0
   svgo: ^4.1.0

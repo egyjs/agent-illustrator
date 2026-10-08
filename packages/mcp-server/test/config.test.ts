@@ -20,12 +20,13 @@ describe('loadConfig', () => {
       AGENT_ILLUSTRATOR_MAX_OPS: '50',
       AGENT_ILLUSTRATOR_MAX_NODES: '100',
       AGENT_ILLUSTRATOR_MAX_SEGMENTS: '500',
+      AGENT_ILLUSTRATOR_MAX_GENERATED: '40',
       AGENT_ILLUSTRATOR_MAX_DOCUMENTS: '3',
       AGENT_ILLUSTRATOR_MAX_RENDER_PIXELS: '1000000',
       AGENT_ILLUSTRATOR_RENDER_DIR: '/tmp/x',
       AGENT_ILLUSTRATOR_LOG_LEVEL: 'warn',
     });
-    expect(c.limits).toEqual({ maxOpsPerBatch: 50, maxNodes: 100, maxSegmentsPerPath: 500 });
+    expect(c.limits).toEqual({ maxOpsPerBatch: 50, maxNodes: 100, maxSegmentsPerPath: 500, maxGenerated: 40 });
     expect([c.maxDocuments, c.maxRenderPixels, c.renderDir, c.logLevel]).toEqual([3, 1_000_000, '/tmp/x', 'warn']);
   });
 
