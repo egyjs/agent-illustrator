@@ -27,4 +27,8 @@ describe('agent-illustrator cli', () => {
     expect(r.stdout).toBe('');
     expect(r.stderr).toContain('Usage');
   });
+
+  it('--doctor also finds the bundled fonts', () => {
+    expect(run('--doctor').stderr).toContain('Tajawal-Regular.ttf');
+  });
 });

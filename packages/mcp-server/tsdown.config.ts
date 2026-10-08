@@ -7,6 +7,9 @@ export default defineConfig({
   fixedExtension: true,
   dts: false,
   clean: true,
-  // Directory (not glob) copy is recursive: dist/agent-kit/content/** mirrors packages/agent-kit/content/**.
-  copy: [{ from: '../agent-kit/content', to: 'dist/agent-kit' }],
+  // Directory copies are recursive: dist/agent-kit/content/** and dist/fonts/**.
+  copy: [
+    { from: '../agent-kit/content', to: 'dist/agent-kit' },
+    { from: '../engine/assets/fonts', to: 'dist' },
+  ],
 });
