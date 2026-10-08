@@ -34,6 +34,7 @@ Status legend:
 - agent-kit content lives in `packages/agent-kit/content/` (core-contract.md, workflow.md, guides/, presets/, prompts/). The package root keeps only `package.json` and `README.md`, so the build copies one folder.
 - Bundled fonts live in `packages/engine/assets/fonts/`. The runtime passes font file paths to the engine, so the engine never guesses install paths.
 - A private `spikes/` workspace package holds the M0 learning tests. Each spike test is deleted once the engine module that supersedes it has its own tests: R1 → M1, R4 → M3, R2 → M8.
+- M3 note (2026-10-08): the R4 spike stays until the owner moves Claude Desktop/Code from `spikes/src/mcp-probe-server.ts` to the real server; deleting it earlier breaks those registrations.
 
 ## A3. Scene model (Adopted as the default with the M2 plan, 2026-10-08; owner may still object)
 
@@ -78,7 +79,7 @@ Record each outcome here with a date and the evidence (spike test name or doc li
 | S4 | Replace `tsup` if it is unmaintained; publish ONE npm package (the server, bundling `engine` and `agent-kit` content) | Clean `npx` (NFR-6); no 3-package publishing | Library check plus M0 Task 1 |
 | S5 | Merge op variants: `boolean {mode}`, one `transform {translate?, rotate?, scale?, skew?, matrix?, pivot?}`, `array {kind}`, `gradient {type}` → about 35 ops instead of 60 | Less registry, doc and example boilerplate; smaller catalog for models to learn | **Adopted** in the M2 plan (2026-10-08): merged variants; M2 ops unaffected |
 | S6 | Use `paper` core headless without `paper-jsdom`, if booleans, `smooth` and `simplify` work | Drops jsdom: lighter install and faster cold start | Spike R1 |
-| S7 | NFR-2 timeouts as input caps plus cooperative deadline checks in loops the engine owns | Synchronous CPU work (paper.js booleans, resvg render) cannot be preempted in-process without worker threads, and worker pools are out of scope per §4.3 | Decide in the M3 plan; document the limit in the README |
+| S7 | NFR-2 timeouts as input caps plus cooperative deadline checks in loops the engine owns | Synchronous CPU work (paper.js booleans, resvg render) cannot be preempted in-process without worker threads, and worker pools are out of scope per §4.3 | **Adopted** in the M3 plan (2026-10-08): input caps (ops, nodes, segments, render pixels, scale, documents) plus logged durations; no preemption. README documents it. |
 
 ### Outcomes recorded (2026-10-07, from the pre-M0 library check in a scratch directory on Node 24.13.1 / Windows 11)
 M0 spike tests re-confirm each outcome inside the repo (and on Linux in CI) before the M1 plan is written.

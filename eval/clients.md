@@ -25,3 +25,19 @@ Re-run on every milestone that changes the tool surface (M3, M9, M10). Probe pro
 Observation (both Claude clients): with the loose schema (S1), the model sees no per-op fields before the call. It
 learns them only from the `apply_ops` description, the `guide` op catalog (PROJECT_INIT §2.6) and server error hints.
 M3 must point the `apply_ops` description at `guide`, and M9 must make the op catalog list every op's fields. No new tool needed.
+
+## M3 server (re-run when the owner switches clients from the probe to the real server)
+
+Register (from the repo, no build needed):
+- Claude Code: `claude mcp add agent-illustrator -- node C:/Users/el3za/Desktop/work/agent-illustrator/packages/mcp-server/src/cli.ts`
+- Claude Desktop: `"agent-illustrator": { "command": "node", "args": ["C:\\Users\\el3za\\Desktop\\work\\agent-illustrator\\packages\\mcp-server\\src\\cli.ts"] }`
+
+Prompt: "Create an 800×600 document, draw a simple landscape (sky, ground, sun, a house), render it with ids
+overlay, fix anything that looks off, then export the SVG."
+
+| Client (version) | Tools listed | Image visible | Model saw image | Batch errors understood | Export valid | Notes |
+|---|---|---|---|---|---|---|
+| (pending owner run) | | | | | | |
+
+Automated stand-in until then: `packages/mcp-server/test/server.e2e.test.ts` and `pnpm smoke` (SDK client over stdio).
+MCP Inspector 2.9.0 `--cli … --method tools/list` against `dist/cli.mjs`: 4 tools, exit 0 (2026-10-08).
