@@ -92,6 +92,18 @@ describe('ops/ungroup', () => {
     expect(after.nodes.b!.style).toEqual({ fill: 'teal', opacity: 0.25 });
   });
 
+  it('moves $last to the topmost released child', () => {
+    const r = run([
+      { op: 'rect', id: 'a', x: 0, y: 0, width: 10, height: 10 },
+      { op: 'rect', id: 'b', x: 20, y: 0, width: 10, height: 10 },
+      { op: 'group', id: 'g', ids: ['a', 'b'] },
+      { op: 'ungroup', ids: ['$last'] },
+      { op: 'style', ids: ['$last'], style: { fill: 'red' } },
+    ]);
+    expect(r.results[4]).toMatchObject({ status: 'ok', ids: ['b'] });
+    expect(r.doc.nodes.b!.style).toEqual({ fill: 'red' });
+  });
+
   it('refuses a node that is not a group and a group that has a clip', () => {
     expect(run([...four, { op: 'ungroup', ids: ['a'] }]).results[4]).toMatchObject({ error: { code: 'invalid_structure' } });
     const clipped = run([

@@ -1,12 +1,32 @@
 import { z } from 'zod';
 import { EngineError } from '../errors.ts';
-import { booleanOp, type Shape } from '../geometry/boolean.ts';
+import { booleanOp } from '../geometry/boolean.ts';
 import { applyToSubpaths, IDENTITY, invert } from '../geometry/transform.ts';
-import { StyleSchema, type PathNode } from '../scene/model.ts';
+import { StyleSchema, type Doc, type GroupNode, type PathNode, type SceneNode, type Style } from '../scene/model.ts';
 import { requireNode, siblings, worldTransform } from '../scene/query.ts';
 import { insertNode, removeSubtree } from '../scene/store.ts';
-import { IdInput, resolveIds, shapeOf, topmost } from './common.ts';
+import { IdInput, resolveIds, segmentCount, shapesOf, topmost } from './common.ts';
 import { defineOp } from './registry.ts';
+
+const paints = (s: Style) => (s.fill ?? 'none') !== 'none' || (s.stroke ?? 'none') !== 'none';
+
+/** A child's style over its parent's: the child's values win, but opacities multiply, as nested SVG groups do. */
+const inherit = (above: Style, own: Style): Style =>
+  above.opacity !== undefined && own.opacity !== undefined ? { ...above, ...own, opacity: above.opacity * own.opacity } : { ...above, ...own };
+
+/** How a group looks as one path: its first painted path's style, with what the groups above it pass down. */
+function groupLook(doc: Doc, group: GroupNode): Style {
+  const firstPainted = (node: SceneNode, above: Style): Style | undefined => {
+    const style = inherit(above, node.style);
+    if (node.type === 'path') return paints(style) ? style : undefined;
+    for (const child of node.children) {
+      const hit = firstPainted(requireNode(doc, child), style);
+      if (hit) return hit;
+    }
+    return undefined;
+  };
+  return firstPainted(group, {}) ?? group.style;
+}
 
 export const boolean = defineOp({
   name: 'boolean',
@@ -38,15 +58,16 @@ export const boolean = defineOp({
     const P = first.parent === null ? IDENTITY : worldTransform(ctx.doc, first.parent);
     const Pinv = invert(P);
     if (!Pinv) throw new EngineError('invalid_structure', `the group holding "${first.id}" is squashed flat (scale 0)`, 'Give that group a non-zero scale first.');
-    let acc: Shape = shapeOf(ctx, first.id);
-    for (const id of ids.slice(1)) acc = booleanOp(input.mode, acc, shapeOf(ctx, id));
-    const segs = acc.subpaths.reduce((n, sp) => n + sp.segs.length, 0);
+    const [head, ...rest] = shapesOf(ctx, ids);
+    let acc = head!;
+    for (const shape of rest) acc = booleanOp(input.mode, acc, shape);
+    const segs = segmentCount(acc.subpaths);
     if (segs > ctx.limits.maxSegmentsPerPath) {
       throw new EngineError('limit_exceeded', `the result has ${segs} segments; the limit is ${ctx.limits.maxSegmentsPerPath}`, 'Combine fewer or simpler shapes at once.');
     }
     if (acc.subpaths.length === 0) ctx.warn('empty_result', `${input.mode} of ${ids.join(', ')} covers no area`);
     const keep = input.keep ?? false;
-    const style = ctx.style(input.style ?? (first.type === 'path' ? first.style : {}));
+    const style = ctx.style(input.style ?? (first.type === 'path' ? first.style : groupLook(ctx.doc, first)));
     const consumed = new Set(keep ? [] : ids);
     const id = ctx.newId(input.id, 'boolean', { releasing: consumed, quiet: input.id !== undefined && consumed.has(input.id) });
     const list = siblings(ctx.doc, first);

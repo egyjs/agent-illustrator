@@ -44,6 +44,21 @@ describe('render/export', () => {
     expect(exportSvg(scene(), { stripIds: true, optimize: false })).not.toContain('id=');
   });
 
+  it.each([false, true])('stripIds keeps a clipPath id and its reference so the clip survives (optimize: %s)', (optimize) => {
+    const r = executeBatch(registry, createDocument({ width: 200, height: 100, background: 'white' }), [
+      { op: 'rect', id: 'photo', x: 0, y: 0, width: 200, height: 100 },
+      { op: 'ellipse', id: 'frame', cx: 100, cy: 50, rx: 40 },
+      { op: 'clip', id: 'photo', shape: 'frame' },
+    ]);
+    expect(r.ok).toBe(true);
+    const out = exportSvg(r.doc, { stripIds: true, optimize });
+    const ids = [...out.matchAll(/ id="([^"]*)"/g)].map((m) => m[1]);
+    expect(ids).toHaveLength(1);
+    expect(out).toContain(`<clipPath id="${ids[0]}"`);
+    expect(out).toContain(`clip-path="url(#${ids[0]})"`);
+    expect(out).not.toContain('id="photo"');
+  });
+
   it('rejects a precision outside 0..6', () => {
     expectCode(() => exportSvg(scene(), { precision: 7 }), 'invalid_input');
     expectCode(() => exportSvg(scene(), { precision: 1.5 }), 'invalid_input');

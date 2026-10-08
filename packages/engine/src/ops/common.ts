@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { EngineError } from '../errors.ts';
 import { unionBoxes } from '../geometry/bezier.ts';
 import { booleanOp, type Shape } from '../geometry/boolean.ts';
-import { compose, IDENTITY, invert } from '../geometry/transform.ts';
+import { applyToSubpaths, compose, IDENTITY, invert } from '../geometry/transform.ts';
 import type { Box, FillRule, Mat6, Subpath, Vec2 } from '../geometry/types.ts';
-import { isValidId, StyleSchema, type PathNode, type Style } from '../scene/model.ts';
+import { isValidId, StyleSchema, type Doc, type PathNode, type Style } from '../scene/model.ts';
 import { requireNode, worldBounds, worldSubpaths, worldTransform } from '../scene/query.ts';
 import { insertNode } from '../scene/store.ts';
 import { Length, type OpContext } from './registry.ts';
@@ -63,6 +63,8 @@ type NewPath = {
 
 const isIdentity = (m: Mat6) => m.every((v, i) => v === IDENTITY[i]);
 
+export const segmentCount = (subpaths: readonly Subpath[]): number => subpaths.reduce((n, sp) => n + sp.segs.length, 0);
+
 /**
  * The transform that makes a new child of `parentId` land at the canvas coordinates of its geometry:
  * the inverse of the parent's world matrix (identity at the top level).
@@ -82,7 +84,7 @@ export function addPath(ctx: OpContext, input: Common, p: NewPath): string {
     throw new EngineError('invalid_structure', `parent "${parent.id}" is a ${parent.type}, not a group`, 'Pass a group id as parent, or leave parent out.');
   }
   const transform = canvasSpaceIn(ctx, parent?.id ?? null);
-  const segs = p.subpaths.reduce((n, sp) => n + sp.segs.length, 0);
+  const segs = segmentCount(p.subpaths);
   if (segs > ctx.limits.maxSegmentsPerPath) {
     throw new EngineError('limit_exceeded', `${segs} segments in one path; the limit is ${ctx.limits.maxSegmentsPerPath}`, 'Use fewer points, or split the shape.');
   }
@@ -141,11 +143,44 @@ export function applyWorld(ctx: OpContext, id: string, D: Mat6): void {
   });
 }
 
-/** A node's filled area in canvas space. A group is the union of the paths inside it. */
+/** Segments in everything that shapes a node: its paths and every clip on the way. */
+function inputSegments(doc: Doc, id: string): number {
+  const node = requireNode(doc, id);
+  const own = node.clip ? segmentCount(node.clip.subpaths) : 0;
+  return own + (node.type === 'path' ? segmentCount(node.subpaths) : node.children.reduce((n, child) => n + inputSegments(doc, child), 0));
+}
+
+/** Unions in rounds of pairs, so no step drags one ever-growing accumulator along. */
+function unionAll(shapes: readonly Shape[]): Shape {
+  let round = shapes;
+  while (round.length > 1) {
+    const next: Shape[] = [];
+    for (let i = 0; i < round.length; i += 2) next.push(i + 1 < round.length ? booleanOp('union', round[i]!, round[i + 1]!) : round[i]!);
+    round = next;
+  }
+  return round[0] ?? { subpaths: [], fillRule: 'nonzero' };
+}
+
+function buildShape(doc: Doc, id: string): Shape {
+  const node = requireNode(doc, id);
+  const shape: Shape = node.type === 'path' ? { subpaths: worldSubpaths(doc, node), fillRule: node.fillRule } : unionAll(node.children.map((child) => buildShape(doc, child)));
+  if (!node.clip) return shape;
+  return booleanOp('intersect', shape, { subpaths: applyToSubpaths(worldTransform(doc, id), node.clip.subpaths), fillRule: node.clip.fillRule });
+}
+
+/**
+ * The filled areas of these nodes in canvas space, one per id. A group is the union of the paths
+ * inside it, and a clip trims whatever it clips. The geometry of all ids together must fit one
+ * path's segment limit, since that is what the booleans on it have to chew through.
+ */
+export function shapesOf(ctx: OpContext, ids: readonly string[]): Shape[] {
+  const segs = ids.reduce((n, id) => n + inputSegments(ctx.doc, id), 0);
+  if (segs > ctx.limits.maxSegmentsPerPath) {
+    throw new EngineError('limit_exceeded', `${segs} segments go into one boolean; the limit is ${ctx.limits.maxSegmentsPerPath}`, 'Combine fewer or simpler shapes per boolean, or split it into several booleans.');
+  }
+  return ids.map((id) => buildShape(ctx.doc, id));
+}
+
 export function shapeOf(ctx: OpContext, id: string): Shape {
-  const node = requireNode(ctx.doc, id);
-  if (node.type === 'path') return { subpaths: worldSubpaths(ctx.doc, node), fillRule: node.fillRule };
-  let acc: Shape = { subpaths: [], fillRule: 'nonzero' };
-  for (const child of node.children) acc = booleanOp('union', acc, shapeOf(ctx, child));
-  return acc;
+  return shapesOf(ctx, [id])[0]!;
 }

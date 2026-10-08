@@ -5,6 +5,12 @@ import { toSvg } from './svg.ts';
 
 export type ExportOptions = { readonly precision?: number; readonly optimize?: boolean; readonly stripIds?: boolean };
 
+/** Drops every id except those a `url(#…)` points at (clipPaths), which would otherwise leave the clip dangling. */
+function stripUnreferencedIds(svg: string): string {
+  const referenced = new Set([...svg.matchAll(/url\(#([^)]*)\)/g)].map((m) => m[1]));
+  return svg.replace(/ id="([^"]*)"/g, (attr, id: string) => (referenced.has(id) ? attr : ''));
+}
+
 /**
  * Final SVG (FR-11.3): tokens resolved, coordinates rounded to `precision` decimals (default 2),
  * then SVGO with ids and groups preserved unless `stripIds` is set.
@@ -15,7 +21,7 @@ export function exportSvg(doc: Doc, options: ExportOptions = {}): string {
     throw new EngineError('invalid_input', `precision must be a whole number 0..6, got ${precision}`, 'Use 2 for most drawings, 0 for pixel art.');
   }
   const raw = toSvg(doc, { precision });
-  if (options.optimize === false) return options.stripIds ? raw.replace(/ id="[^"]*"/g, '') : raw;
+  if (options.optimize === false) return options.stripIds ? stripUnreferencedIds(raw) : raw;
   const overrides: { collapseGroups: false; cleanupIds?: false } = { collapseGroups: false };
   if (!options.stripIds) overrides.cleanupIds = false;
   return optimize(raw, { multipass: true, floatPrecision: precision, plugins: [{ name: 'preset-default', params: { overrides } }] }).data;

@@ -1,18 +1,28 @@
 import { castDraft, produce } from 'immer';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { pathBounds } from '../../src/geometry/bezier.ts';
 import { signedArea } from '../../src/geometry/flatten.ts';
 import { rotate, scale, translate } from '../../src/geometry/transform.ts';
 import { anchorPoint, applyWorld, shapeOf, topmost } from '../../src/ops/common.ts';
 import { defineOp, executeBatch, Registry } from '../../src/ops/registry.ts';
+import type { Doc } from '../../src/scene/model.ts';
 import { worldBounds } from '../../src/scene/query.ts';
 import { docOf, groupNode, pathNode } from '../fixtures.ts';
-import { square } from '../geometry/helpers.ts';
+import { KAPPA_CIRCLE_AREA, kappaCircle, square } from '../geometry/helpers.ts';
 
 const box = { x: 10, y: 20, width: 100, height: 50 };
 /** A test op that runs one helper with a live OpContext. */
 const probe = (fn: Parameters<typeof defineOp>[0]['handler']) =>
   new Registry().register(defineOp({ name: 'probe', domain: 'test', description: '', schema: z.strictObject({}), examples: [], handler: fn }));
+const shapeIn = (doc: Doc, id: string) => {
+  let shape: ReturnType<typeof shapeOf> | undefined;
+  executeBatch(probe((_, ctx) => ((shape = shapeOf(ctx, id)), {})), doc, [{ op: 'probe' }]);
+  return shape!;
+};
+/** A circle of radius 50 around the local origin, as a clip. */
+const disc = { subpaths: [kappaCircle(0, 0, 50)], fillRule: 'nonzero' } as const;
+const quarterDisc = (KAPPA_CIRCLE_AREA * 50 * 50) / 4;
 
 describe('ops/common', () => {
   it('anchorPoint covers the 9 anchors', () => {
@@ -55,6 +65,36 @@ describe('ops/common', () => {
     );
     expect(area).toBeCloseTo(175, 6);
     expect(x).toBeGreaterThanOrEqual(100);
+  });
+
+  it('shapeOf trims a path to its clip, which lives in the path’s own coordinates', () => {
+    const doc = docOf([pathNode('r', [square(0, 0, 50)], { transform: scale(2), clip: { ...disc, subpaths: [kappaCircle(0, 0, 25)] } })]);
+    expect(signedArea(shapeIn(doc, 'r').subpaths) / quarterDisc).toBeCloseTo(1, 2);
+  });
+
+  it('shapeOf trims a group to its clip, through the group’s transform', () => {
+    const doc = docOf([groupNode('g', ['r'], { transform: translate(100, 0), clip: disc }), pathNode('r', [square(0, 0, 100)], { parent: 'g' })]);
+    const s = shapeIn(doc, 'g');
+    expect(signedArea(s.subpaths) / quarterDisc).toBeCloseTo(1, 2);
+    expect(pathBounds(s.subpaths)!.x).toBeGreaterThanOrEqual(100 - 1e-9);
+  });
+
+  it('shapeOf honours a clip on a path inside a group', () => {
+    const doc = docOf([
+      groupNode('g', ['r', 's']),
+      pathNode('r', [square(0, 0, 100)], { parent: 'g', clip: disc }),
+      pathNode('s', [square(200, 200, 10)], { parent: 'g' }),
+    ]);
+    expect(signedArea(shapeIn(doc, 'g').subpaths) / (quarterDisc + 100)).toBeCloseTo(1, 2);
+  });
+
+  it('shapeOf unions a group of many paths into one outline', () => {
+    const circles = Array.from({ length: 7 }, (_, i) => pathNode(`c${i}`, [kappaCircle(15 * i, 0, 10)], { parent: 'g' }));
+    const doc = docOf([groupNode('g', circles.map((c) => c.id)), ...circles]);
+    const s = shapeIn(doc, 'g');
+    expect(s.subpaths).toHaveLength(1);
+    const b = pathBounds(s.subpaths)!;
+    expect([b.x, b.y, b.width, b.height].map((v) => Math.round(v))).toEqual([-10, -10, 110, 20]);
   });
 
   it('topmost drops nodes whose ancestor is also selected', () => {

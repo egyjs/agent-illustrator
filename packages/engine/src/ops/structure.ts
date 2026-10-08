@@ -225,6 +225,8 @@ export const ungroup = defineOp({
         delete d.nodes[id];
       });
       released.push(...g.children);
+      // The group is gone, so "$last" follows to its topmost child.
+      if (ctx.last === id && g.children.length > 0) ctx.last = g.children.at(-1);
     }
     return { ids: released };
   },

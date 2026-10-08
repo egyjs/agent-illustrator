@@ -7,7 +7,7 @@ import { ellipse, rect } from '../../src/ops/shapes.ts';
 import { group } from '../../src/ops/structure.ts';
 import { createDocument, type Doc, type PathNode } from '../../src/scene/model.ts';
 import { docOf, expectIntact, groupNode, pathNode } from '../fixtures.ts';
-import { square } from '../geometry/helpers.ts';
+import { KAPPA_CIRCLE_AREA, kappaCircle, square } from '../geometry/helpers.ts';
 
 const registry = new Registry().register(rect, ellipse, group, boolean);
 function run(ops: unknown[], doc: Doc = createDocument({ width: 800, height: 600 })): BatchResult {
@@ -77,5 +77,64 @@ describe('ops/boolean', () => {
     const r = executeBatch(registry, doc, [...two, { op: 'boolean', mode: 'union', ids: ['a', 'b'] }], { limits: { maxSegmentsPerPath: 5 } });
     expect(r.results[2]).toMatchObject({ status: 'error', error: { code: 'limit_exceeded' } });
     expect(r.doc).toBe(doc);
+  });
+
+  it('rejects inputs longer than the segment limit before running any boolean, even when the result is short', () => {
+    // Identical squares: 12 segments go in, 4 come out.
+    const doc = docOf([
+      groupNode('g', ['a', 'b', 'c']),
+      ...['a', 'b', 'c'].map((id) => pathNode(id, [square(0, 0, 10)], { parent: 'g' })),
+      pathNode('o', [square(0, 0, 10)]),
+    ]);
+    const limits = { maxSegmentsPerPath: 8 };
+    const inGroup = executeBatch(registry, doc, [{ op: 'boolean', mode: 'union', ids: ['g', 'o'] }], { limits });
+    expect(inGroup.results[0]).toMatchObject({ status: 'error', error: { code: 'limit_exceeded', hint: expect.stringContaining('several booleans') } });
+    expect(inGroup.doc).toBe(doc);
+    const together = executeBatch(registry, doc, [{ op: 'boolean', mode: 'union', ids: ['a', 'b', 'c'] }], { limits });
+    expect(together.results[0]).toMatchObject({ status: 'error', error: { code: 'limit_exceeded' } });
+    expect(together.doc).toBe(doc);
+  });
+
+  it('a clipped operand counts only its visible part', () => {
+    const disc = { subpaths: [kappaCircle(0, 0, 50)], fillRule: 'nonzero' } as const;
+    const doc = docOf([pathNode('r', [square(0, 0, 100)], { clip: disc }), pathNode('s', [square(200, 200, 10)])]);
+    const r = run([{ op: 'boolean', mode: 'union', ids: ['r', 's'], id: 'u' }], doc);
+    expect(signedArea((r.doc.nodes.u as PathNode).subpaths) / ((KAPPA_CIRCLE_AREA * 50 * 50) / 4 + 100)).toBeCloseTo(1, 2);
+  });
+
+  describe('a group as the first operand', () => {
+    it('keeps the look its paths have', () => {
+      const white = { fill: '#ffffff' };
+      const r = run([
+        { op: 'ellipse', id: 'p1', cx: 100, cy: 100, rx: 40, style: white },
+        { op: 'ellipse', id: 'p2', cx: 140, cy: 100, rx: 40, style: white },
+        { op: 'group', id: 'cloud', ids: ['p1', 'p2'] },
+        { op: 'ellipse', id: 'p3', cx: 200, cy: 100, rx: 40, style: { fill: '#ff0000' } },
+        { op: 'boolean', mode: 'union', ids: ['cloud', 'p3'], id: 'u' },
+      ]);
+      expect(r.doc.nodes.u!.style).toEqual(white);
+    });
+
+    const hidden = pathNode('hidden', [square(0, 0, 10)], { parent: 'g', style: { fill: 'none' } });
+    const other = pathNode('o', [square(40, 0, 10)]);
+
+    it('takes the first painted path’s style, inherited from the group down, with opacities multiplied', () => {
+      const doc = docOf([
+        groupNode('g', ['hidden', 'inner'], { style: { fill: '#ff0000', opacity: 0.5 } }),
+        hidden,
+        groupNode('inner', ['leaf'], { parent: 'g', style: { stroke: '#000000' } }),
+        pathNode('leaf', [square(20, 0, 10)], { parent: 'inner', style: { opacity: 0.5 } }),
+        other,
+      ]);
+      const r = run([{ op: 'boolean', mode: 'union', ids: ['g', 'o'], id: 'u' }], doc);
+      expect(r.doc.nodes.u!.style).toEqual({ fill: '#ff0000', stroke: '#000000', opacity: 0.25 });
+    });
+
+    it('falls back to its own style when no path paints, and yields to an explicit style', () => {
+      const doc = docOf([groupNode('g', ['hidden'], { style: { opacity: 0.5 } }), hidden, other]);
+      const ops = { op: 'boolean', mode: 'union', ids: ['g', 'o'], id: 'u' };
+      expect(run([ops], doc).doc.nodes.u!.style).toEqual({ opacity: 0.5 });
+      expect(run([{ ...ops, style: { fill: '#0000ff' } }], doc).doc.nodes.u!.style).toEqual({ fill: '#0000ff' });
+    });
   });
 });
