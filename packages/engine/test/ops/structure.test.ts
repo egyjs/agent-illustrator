@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createRegistry } from '../../src/ops/index.ts';
 import { executeBatch, type BatchResult } from '../../src/ops/registry.ts';
@@ -6,6 +7,9 @@ import { worldBounds } from '../../src/scene/query.ts';
 import { expectIntact } from '../fixtures.ts';
 
 const registry = createRegistry();
+const font = (f: string) => fileURLToPath(new URL(`../../assets/fonts/${f}`, import.meta.url));
+/** Bundled fonts keep the text examples fast; without them resvg loads every system font per measurement. */
+const fonts = { files: [font('Tajawal-Regular.ttf'), font('Tajawal-Bold.ttf')], defaultFamily: 'Tajawal' };
 function run(ops: unknown[], doc: Doc = createDocument({ width: 800, height: 600 })): BatchResult {
   const r = executeBatch(registry, doc, ops);
   expectIntact(r.doc);
@@ -80,9 +84,8 @@ describe('ops: createRegistry', () => {
       expect(def.examples.length).toBeGreaterThan(0);
       for (const example of def.examples) {
         expect(example.at(-1)?.op).toBe(def.name);
-        expect(executeBatch(registry, createDocument({ width: 800, height: 600 }), example).ok).toBe(true);
+        expect(executeBatch(registry, createDocument({ width: 800, height: 600 }), example, { fonts }).ok).toBe(true);
       }
     }
-    // Text examples run without bundled fonts, so resvg loads the system fonts for each measurement.
-  }, 30_000);
+  });
 });
