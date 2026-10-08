@@ -4,5 +4,6 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "dependencies": { "paper": "catalog:" }
+  "dependencies": { "culori": "catalog:", "immer": "catalog:", "paper": "catalog:", "zod": "catalog:" },
+  "devDependencies": { "@types/culori": "catalog:" }
 }
