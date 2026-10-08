@@ -2496,6 +2496,33 @@ git commit -m "feat(engine): public API and M2 acceptance; record A3 and S5 outc
 
 ---
 
+## Execution record (2026-10-08)
+
+Executed inline on branch `m2-scene`. One fresh final reviewer (Opus) went over the whole branch.
+
+**Rulings made during execution**, each with its cost if wrong:
+- Task 5: the did-you-mean test checks the JSON-escaped form `\"box\"`. `JSON.stringify` escapes quotes, so the plan's `'"box"'` could never match. *Cost if wrong:* none.
+- Task 6: a clamped 800×300 rect has 6 segments (2 long lines and 4 arcs), not the plan's 4. The short edges vanish, and the long ones keep 500. *Cost if wrong:* none.
+- Task 9: the snapshot z-order is sky, ground, sun, home, path, because `home` takes the house's slot below the path. The plan's note was wrong. *Cost if wrong:* none.
+- Task 9: the mcp-server tsconfig includes the engine's paper shim. The public API now reaches `paper-adapter.ts`, and lint bans reference-path directives. *Cost if wrong:* one include line per consumer package.
+
+**Final review: "with fixes".** Both Important findings were fixed, each with a test that failed first and passed after the fix. Suite: 208/208.
+- Shapes added to a transformed group now take canvas coordinates. The node gets the inverse of its parent's world matrix, and a parent squashed flat gives `invalid_structure`.
+- `validateDocument` rejects token values that are not colors, and paints that resolve to nothing. A fill that no longer resolves renders as `none` instead of black. Paint errors name a token that holds a bad color.
+
+**Deferred minors:**
+1. Non-finite geometry from huge numbers (1e308, or giant percent strings) can be committed. A cap on `Length` would fix it.
+2. An explicit `undefined` in `options.limits` turns that cap off. M3's config always passes numbers.
+3. The hint for prototype-named ids (`constructor`) does not explain why the id is rejected.
+4. The world and bounds caches go stale if they are called on an immer draft. Handlers must read `ctx.doc`, which is frozen.
+5. `$last` can point at a deleted node, and `DocumentStore` does not carry `lastCreated` across checkpoints.
+6. Setting and unsetting the same style key in one call drops it silently.
+7. `toSvg` does not validate `precision`. `exportSvg` (M3) validates 0..6.
+8. `createDocument` and `validateDocument` return documents that are not frozen.
+9. Op ids are validated in the handler, not in the zod schema, so a bad id is reported at apply time, not at validate time.
+10. Small hint gaps: a missing `Length` gives a generic union error, the group-parent error does not name the members, and the limit hint says "boolean union".
+11. The rollback test does not pass a non-undefined `lastCreated`.
+
 ## Follow-ups for later plans (not M2 work)
 
 - **M3:** the server holds one `DocumentStore` per session and passes `lastCreated` between batches. `apply_ops` maps `BatchResult` to tool output. The registry's op names feed the loose `apply_ops` enum (S1/F4).
