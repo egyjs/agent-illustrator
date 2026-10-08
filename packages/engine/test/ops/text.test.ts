@@ -79,7 +79,8 @@ describe('ops/text: text', () => {
     expect((plain.doc.nodes.a as TextNode).font).toEqual({ family: 'sans-serif', size: 24, weight: 400, letterSpacing: 0 });
     const r = run([{ op: 'text', id: 'a', content: 'Hi', x: '50%', y: '50%', size: '5%' }]);
     expect(textOf(r, 'a')).toMatchObject({ font: { size: 30 }, at: { x: 400, y: 300 } });
-  });
+    // Without bundled fonts resvg loads every system font; that takes over 15 s on CI Windows runners.
+  }, 60_000);
 
   it('weight takes words or numbers; bold is wider than normal', () => {
     const r = run([
