@@ -28,9 +28,12 @@ export interface OpContext {
   node(ref: string): SceneNode;
   /**
    * Claims an id for a new node: the requested one (suffixed -2, -3… with a warning when taken) or
-   * "<prefix>-<n>". The claimed id becomes "$last".
+   * "<prefix>-<n>". The claimed id becomes "$last". `releasing` lists ids this op deletes before it
+   * inserts, which therefore count as free. `quiet` suppresses the renamed warning.
    */
-  newId(requested: string | undefined, prefix: string): string;
+  newId(requested: string | undefined, prefix: string, options?: { readonly releasing?: ReadonlySet<string>; readonly quiet?: boolean }): string;
+  /** The node "$last" refers to. Ops that rename or replace nodes keep it pointing at the right one. */
+  last: string | undefined;
   /** Canvas units from a number or a percent of the canvas width (x), height (y) or smaller side (min). */
   len(v: Length, axis: Axis): number;
   /** Checks every paint in the style (a color or an existing token) and drops undefined keys. */
@@ -80,7 +83,15 @@ export class Registry {
   }
 }
 
-type Done = { readonly op: string; readonly id?: string; readonly ids?: readonly string[]; readonly bounds?: Box | null; readonly warnings: readonly Warning[] };
+type Done = {
+  readonly op: string;
+  readonly id?: string;
+  readonly ids?: readonly string[];
+  readonly bounds?: Box | null;
+  /** Exact world bounds of each returned id that still exists. */
+  readonly boundsById?: Readonly<Record<string, Box | null>>;
+  readonly warnings: readonly Warning[];
+};
 
 export type OpOutcome =
   | (Done & { readonly status: 'ok' | 'rolled_back' })
@@ -136,8 +147,8 @@ class Context implements OpContext {
     return requireNode(this.doc, this.last);
   }
 
-  newId(requested: string | undefined, prefix: string): string {
-    const taken = (id: string) => getNode(this.doc, id) !== undefined || this.#claimed.has(id);
+  newId(requested: string | undefined, prefix: string, options: { readonly releasing?: ReadonlySet<string>; readonly quiet?: boolean } = {}): string {
+    const taken = (id: string) => (getNode(this.doc, id) !== undefined && !options.releasing?.has(id)) || this.#claimed.has(id);
     let id: string;
     if (requested === undefined) {
       let n = 1;
@@ -154,7 +165,7 @@ class Context implements OpContext {
       const stem = requested.slice(0, 58);
       id = requested;
       for (let n = 2; taken(id); n++) id = `${stem}-${n}`;
-      if (id !== requested) this.warn('id_renamed', `id "${requested}" is taken; the new node is "${id}"`);
+      if (id !== requested && !options.quiet) this.warn('id_renamed', `id "${requested}" is taken; the new node is "${id}"`);
     }
     this.#claimed.add(id);
     this.last = id;
@@ -261,6 +272,9 @@ export function executeBatch(registry: Registry, doc: Doc, calls: readonly unkno
         op: names[i]!,
         ...(result.id === undefined ? {} : { id: result.id, bounds: worldBounds(current, result.id) }),
         ...(result.ids === undefined ? {} : { ids: result.ids }),
+        ...(result.ids === undefined
+          ? {}
+          : { boundsById: Object.fromEntries(result.ids.filter((x) => Object.hasOwn(current.nodes, x)).map((x) => [x, worldBounds(current, x)])) }),
         warnings: ctx.warnings,
       });
     } catch (e) {

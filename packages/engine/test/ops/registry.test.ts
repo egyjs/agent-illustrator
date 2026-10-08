@@ -70,6 +70,11 @@ describe('ops/registry: executeBatch', () => {
     expect(r.results[3]).toMatchObject({ op: '?', error: { code: 'invalid_input' } });
   });
 
+  it('ops that return several ids get bounds for each one that still exists', () => {
+    const r = executeBatch(registry, fresh(), [square('a'), { op: 'touch', ref: 'a' }]);
+    expect(r.results[1]).toMatchObject({ ids: ['a'], boundsById: { a: { x: 0, y: 0, width: 5, height: 5 } } });
+  });
+
   it('rolls back the whole batch when an op fails mid-way', () => {
     const doc = fresh();
     const r = executeBatch(registry, doc, [square('a'), square('b', 10), { op: 'touch', ref: 'missing' }, square('c', 20)]);

@@ -1,50 +1,10 @@
 import { z } from 'zod';
 import { EngineError } from '../errors.ts';
 import { ellipse as ellipsePath, polyline, roundCorners } from '../geometry/paths.ts';
-import { cosSinDeg, IDENTITY, invert } from '../geometry/transform.ts';
-import type { Mat6, Subpath, Vec2 } from '../geometry/types.ts';
-import { StyleSchema, type PathNode, type Style } from '../scene/model.ts';
-import { worldTransform } from '../scene/query.ts';
-import { insertNode } from '../scene/store.ts';
-import { defineOp, Length, type OpContext } from './registry.ts';
-
-const common = { id: z.string().optional(), parent: z.string().optional(), style: StyleSchema.optional() };
-type Common = { readonly id?: string; readonly parent?: string; readonly style?: Style };
-
-function positive(op: string, name: string, v: number): number {
-  if (!(v > 0)) {
-    throw new EngineError('invalid_input', `${op} ${name} must be > 0, got ${v}`, `Give ${name} a positive size in canvas units or a percent such as "10%".`);
-  }
-  return v;
-}
-
-const isIdentity = (m: Mat6) => m.every((v, i) => v === IDENTITY[i]);
-
-/**
- * Inserts a new path node (on top of its parent or the canvas) and returns its id. Coordinates are
- * canvas units even inside a transformed group: the node gets the inverse of the parent's world
- * matrix, so it lands where the numbers say and still moves with the group afterwards.
- */
-function addPath(ctx: OpContext, input: Common, prefix: string, subpaths: Subpath[], source: Record<string, unknown>, defaults: Style = {}): string {
-  const parent = input.parent === undefined ? null : ctx.node(input.parent);
-  if (parent && parent.type !== 'group') {
-    throw new EngineError('invalid_structure', `parent "${parent.id}" is a ${parent.type}, not a group`, 'Pass a group id as parent, or leave parent out.');
-  }
-  const parentWorld = parent ? worldTransform(ctx.doc, parent.id) : IDENTITY;
-  const transform = isIdentity(parentWorld) ? IDENTITY : invert(parentWorld);
-  if (!transform) {
-    throw new EngineError('invalid_structure', `group "${parent!.id}" is squashed flat (scale 0)`, 'Give that group a non-zero scale before adding to it.');
-  }
-  const segs = subpaths.reduce((n, sp) => n + sp.segs.length, 0);
-  if (segs > ctx.limits.maxSegmentsPerPath) {
-    throw new EngineError('limit_exceeded', `${segs} segments in one path; the limit is ${ctx.limits.maxSegmentsPerPath}`, 'Use fewer points or sides.');
-  }
-  const style = ctx.style({ ...defaults, ...input.style });
-  const id = ctx.newId(input.id, prefix);
-  const node: PathNode = { id, type: 'path', parent: parent?.id ?? null, transform, style, fillRule: 'nonzero', subpaths, meta: { source } };
-  ctx.update((d) => insertNode(d, node));
-  return id;
-}
+import { cosSinDeg } from '../geometry/transform.ts';
+import type { Vec2 } from '../geometry/types.ts';
+import { addPath, common, positive } from './common.ts';
+import { defineOp, Length } from './registry.ts';
 
 export const rect = defineOp({
   name: 'rect',
@@ -67,7 +27,7 @@ export const rect = defineOp({
       if (rounded.clamped > 0) ctx.warn('radius_clamped', `radius ${r} is more than half the shorter side; used ${Math.min(w, h) / 2}`);
       sp = rounded.subpath;
     }
-    return { id: addPath(ctx, input, 'rect', [sp], { kind: 'rect', x, y, width: w, height: h, radius: r }) };
+    return { id: addPath(ctx, input, { prefix: 'rect', subpaths: [sp], source: { kind: 'rect', x, y, width: w, height: h, radius: r } }) };
   },
 });
 
@@ -81,7 +41,7 @@ export const ellipse = defineOp({
     const cx = ctx.len(input.cx, 'x'), cy = ctx.len(input.cy, 'y');
     const rx = positive('ellipse', 'rx', ctx.len(input.rx, 'x'));
     const ry = input.ry === undefined ? rx : positive('ellipse', 'ry', ctx.len(input.ry, 'y'));
-    return { id: addPath(ctx, input, 'ellipse', [ellipsePath(cx, cy, rx, ry)], { kind: 'ellipse', cx, cy, rx, ry }) };
+    return { id: addPath(ctx, input, { prefix: 'ellipse', subpaths: [ellipsePath(cx, cy, rx, ry)], source: { kind: 'ellipse', cx, cy, rx, ry } }) };
   },
 });
 
@@ -99,7 +59,7 @@ export const polygon = defineOp({
       const [c, s] = cosSinDeg(rotation - 90 + (360 * k) / input.sides);
       return [cx + r * c, cy + r * s];
     });
-    return { id: addPath(ctx, input, 'polygon', [polyline(pts, true)], { kind: 'polygon', cx, cy, radius: r, sides: input.sides, rotation }) };
+    return { id: addPath(ctx, input, { prefix: 'polygon', subpaths: [polyline(pts, true)], source: { kind: 'polygon', cx, cy, radius: r, sides: input.sides, rotation } }) };
   },
 });
 
@@ -115,6 +75,13 @@ export const line = defineOp({
     if (a[0] === b[0] && a[1] === b[1]) {
       throw new EngineError('invalid_input', 'line end points are the same point', 'Give the line two different end points.');
     }
-    return { id: addPath(ctx, input, 'line', [polyline([a, b], false)], { kind: 'line', x1: a[0], y1: a[1], x2: b[0], y2: b[1] }, { stroke: '#000000' }) };
+    return {
+      id: addPath(ctx, input, {
+        prefix: 'line',
+        subpaths: [polyline([a, b], false)],
+        source: { kind: 'line', x1: a[0], y1: a[1], x2: b[0], y2: b[1] },
+        defaults: { stroke: '#000000' },
+      }),
+    };
   },
 });
