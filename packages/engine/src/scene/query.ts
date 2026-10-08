@@ -51,20 +51,33 @@ const boundsCache = new WeakMap<PathNode, { readonly world: Mat6; readonly box: 
 
 /**
  * Exact world-space bounds (FR-5.3): control points go through the world matrix, then exact Bézier
- * bounds are taken. Groups union their children. Empty groups and empty paths give null. Stroke
- * width is not included.
+ * bounds are taken. Groups union their children. A clip trims the box to the clip's own bounds.
+ * Empty groups and empty paths give null. Stroke width is not included.
  */
 export function worldBounds(doc: Doc, id: string): Box | null {
   const node = requireNode(doc, id);
+  const box = unclippedBounds(doc, node);
+  if (!box || !node.clip) return box;
+  const clipBox = pathBounds(applyToSubpaths(worldTransform(doc, id), node.clip.subpaths));
+  return clipBox ? intersectBoxes(box, clipBox) : null;
+}
+
+function unclippedBounds(doc: Doc, node: SceneNode): Box | null {
   if (node.type === 'group') {
     return unionBoxes(node.children.map((c) => worldBounds(doc, c)).filter((b): b is Box => b !== null));
   }
-  const world = worldTransform(doc, id);
+  const world = worldTransform(doc, node.id);
   const hit = boundsCache.get(node);
   if (hit && sameMatrix(hit.world, world)) return hit.box;
   const box = pathBounds(applyToSubpaths(world, node.subpaths));
   boundsCache.set(node, { world, box });
   return box;
+}
+
+function intersectBoxes(a: Box, b: Box): Box | null {
+  const x0 = Math.max(a.x, b.x), y0 = Math.max(a.y, b.y);
+  const x1 = Math.min(a.x + a.width, b.x + b.width), y1 = Math.min(a.y + a.height, b.y + b.height);
+  return x1 >= x0 && y1 >= y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null;
 }
 
 /** The node and everything below it, depth-first, parents before children. */

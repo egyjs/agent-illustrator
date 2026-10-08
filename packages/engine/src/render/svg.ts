@@ -44,10 +44,16 @@ function element(doc: Doc, id: string, n: Fmt, fine: Fmt): string {
     const [a, b, c, d, e, f] = node.transform;
     attrs.push(`transform="matrix(${[a, b, c, d].map(fine).join(' ')} ${n(e)} ${n(f)})"`);
   }
+  let prefix = '';
+  if (node.clip) {
+    const rule = node.clip.fillRule === 'evenodd' ? ' clip-rule="evenodd"' : '';
+    prefix = `<clipPath id="__clip_${node.id}"><path d="${pathData(node.clip.subpaths, n)}"${rule}/></clipPath>`;
+    attrs.push(`clip-path="url(#__clip_${node.id})"`);
+  }
   attrs.push(...styleAttrs(doc, node.style, n));
-  if (node.type === 'path') return `<path ${attrs.join(' ')}/>`;
+  if (node.type === 'path') return `${prefix}<path ${attrs.join(' ')}/>`;
   const children = node.children.map((child) => element(doc, child, n, fine)).join('');
-  return children === '' ? `<g ${attrs.join(' ')}/>` : `<g ${attrs.join(' ')}>${children}</g>`;
+  return children === '' ? `${prefix}<g ${attrs.join(' ')}/>` : `${prefix}<g ${attrs.join(' ')}>${children}</g>`;
 }
 
 const isIdentity = (m: Mat6) => m === IDENTITY || m.every((v, i) => v === IDENTITY[i]);

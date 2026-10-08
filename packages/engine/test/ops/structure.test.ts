@@ -70,8 +70,11 @@ describe('ops/delete', () => {
 });
 
 describe('ops: createRegistry', () => {
-  it('registers the seven M2 ops, and every example runs and ends with its op', () => {
-    expect(registry.names()).toEqual(['rect', 'ellipse', 'polygon', 'line', 'style', 'group', 'delete']);
+  it('registers every built-in op, and every example runs and ends with its op', () => {
+    expect(registry.names()).toEqual([
+      'rect', 'ellipse', 'polygon', 'star', 'line', 'path_from_points', 'path_commands', 'round_corners', 'boolean', 'transform',
+      'place', 'align', 'distribute', 'snap', 'style', 'group', 'ungroup', 'reorder', 'duplicate', 'rename', 'clip', 'delete',
+    ]);
     for (const def of registry.list()) {
       expect(def.examples.length).toBeGreaterThan(0);
       for (const example of def.examples) {

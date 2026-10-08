@@ -35,11 +35,15 @@ export type Style = {
 /** Provenance: the primitive or generator parameters a node was made from (FR-1.2). */
 export type NodeMeta = { readonly source?: unknown };
 
+/** A clip region in the node's own coordinates (before its transform), as filled geometry. */
+export type ClipShape = { readonly subpaths: readonly Subpath[]; readonly fillRule: FillRule };
+
 type NodeBase = {
   readonly id: string;
   readonly parent: string | null;
   readonly transform: Mat6;
   readonly style: Style;
+  readonly clip?: ClipShape;
   readonly meta?: NodeMeta;
 };
 
@@ -86,6 +90,7 @@ const nodeBase = {
   parent: IdSchema.nullable(),
   transform: Mat6Schema,
   style: StyleSchema,
+  clip: z.strictObject({ subpaths: z.array(SubpathSchema), fillRule: z.enum(['nonzero', 'evenodd']) }).optional(),
   meta: z.strictObject({ source: z.unknown().optional() }).optional(),
 };
 const GroupSchema = z.strictObject({ ...nodeBase, type: z.literal('group'), children: z.array(IdSchema) });

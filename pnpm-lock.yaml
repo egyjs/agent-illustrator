@@ -134,6 +134,9 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.4.0
+      rbush:
+        specifier: 'catalog:'
+        version: 4.0.1
       svgo:
         specifier: 'catalog:'
         version: 4.1.0
