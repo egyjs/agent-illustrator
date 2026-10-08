@@ -77,11 +77,13 @@ export function rasterize(doc: Doc, options: RasterOptions = {}): Raster {
     : [region.x - ((width - region.width * k) / 2 + left) / k, region.y - ((height - region.height * k) / 2 + top) / k, w2 / k, h2 / k].join(' ');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w2}" height="${h2}" viewBox="${view}">${inner}${overlay}</svg>`;
   const fonts = options.fonts;
+  // Loading the system fonts takes seconds on hosts with many fonts; skip it when nothing draws text.
+  const drawsText = (options.overlays ?? []).includes('ids') || Object.values(doc.nodes).some((n) => n.type === 'text');
   const image = new Resvg(svg, {
     background: options.background ?? 'white',
     font: fonts
       ? { fontFiles: [...fonts.files], loadSystemFonts: false, defaultFontFamily: fonts.defaultFamily }
-      : { loadSystemFonts: true },
+      : { loadSystemFonts: drawsText },
     ...(w2 === width && h2 === height ? {} : { crop: { left, top, right: left + width, bottom: top + height } }),
   }).render();
   return { width: image.width, height: image.height, png: image.asPng(), pixels: image.pixels };

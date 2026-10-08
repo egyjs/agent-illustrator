@@ -5,6 +5,7 @@
 - MIT license (`LICENSE`, `license` fields; the built bundle carries it in `dist/`).
 - CI: `pnpm/action-setup@v6` (Node 24); build runs before tests so the eval server tests run in CI.
 - README: install from source until the package is on npm.
+- `rasterize` without bundled fonts loads the system fonts only when something draws text (text nodes or the `ids` overlay); renders without text no longer pay seconds of font loading on hosts with many fonts.
 
 ## 1.0.0 (2026-10-08)
 
