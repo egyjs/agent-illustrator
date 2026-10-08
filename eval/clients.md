@@ -40,4 +40,10 @@ overlay, fix anything that looks off, then export the SVG."
 | Claude Code (owner run, 2026-10-08) | yes (4) | not recorded | yes: critiqued the ids render and a 2× zoom of the house | n/a (no failing batch) | yes: SVGO output, ids and `house` group kept (`C:\Users\el3za\tmp\landscape.svg`) | Landscape with sky, ground, sun, house (body, roof, chimney, eave, windows with crossbars, door, knob). Only regular polygons existed, so the model faked a gable roof with a diamond half-hidden behind the body; M4 `path_from_points`/`path_commands` remove that workaround. |
 
 Automated stand-in until then: `packages/mcp-server/test/server.e2e.test.ts` and `pnpm smoke` (SDK client over stdio).
+
+Probe 2 (Claude Code, 2026-10-08), prompt "draw a fetus inside the womb with an animation showing movement every 5 seconds".
+The model's plan read the op list from the `apply_ops` description correctly and named three gaps:
+- **No curves.** M4 adds `path_from_points` (smooth/fit) and `path_commands`.
+- **No rotated ellipses.** The M4 `transform` op rotates any node about a pivot.
+- **No animation.** Out of v1 scope. The model planned to export SVG and hand-write CSS keyframes keyed on node ids. That works only because export keeps ids, and it breaks the core contract's "never write raw SVG". Logged as suggestion S8 in the spec.
 MCP Inspector 2.9.0 `--cli … --method tools/list` against `dist/cli.mjs`: 4 tools, exit 0 (2026-10-08).
