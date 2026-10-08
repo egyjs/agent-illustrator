@@ -33,3 +33,4 @@ export {
 } from './ops/registry.ts';
 export { createRegistry } from './ops/index.ts';
 export { toSvg, type SvgOptions } from './render/svg.ts';
+export { MAX_RENDER_PIXELS, MAX_SCALE, rasterize, type Overlay, type Raster, type RasterFonts, type RasterOptions } from './render/raster.ts';

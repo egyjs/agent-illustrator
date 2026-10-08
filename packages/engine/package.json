@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "dependencies": { "culori": "catalog:", "immer": "catalog:", "paper": "catalog:", "zod": "catalog:" },
+  "dependencies": {
+    "@resvg/resvg-js": "catalog:",
+    "culori": "catalog:",
+    "immer": "catalog:",
+    "paper": "catalog:",
+    "svgo": "catalog:",
+    "zod": "catalog:"
+  },
   "devDependencies": { "@types/culori": "catalog:" }
 }
