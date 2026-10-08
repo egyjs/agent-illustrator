@@ -8,14 +8,19 @@
   "engines": { "node": ">=22.18" },
   "scripts": { "build": "tsdown" },
   "dependencies": {
+    "@modelcontextprotocol/server": "catalog:",
+    "@resvg/resvg-js": "catalog:",
     "culori": "catalog:",
     "immer": "catalog:",
     "paper": "catalog:",
+    "pino": "catalog:",
+    "svgo": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@agent-illustrator/agent-kit": "workspace:*",
     "@agent-illustrator/engine": "workspace:*",
+    "@modelcontextprotocol/client": "catalog:",
     "tsdown": "catalog:"
   }
 }
