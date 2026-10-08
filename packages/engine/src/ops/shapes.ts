@@ -85,3 +85,37 @@ export const line = defineOp({
     };
   },
 });
+
+export const star = defineOp({
+  name: 'star',
+  domain: 'shapes',
+  description: 'Star with `points` tips: outer and inner radius around (cx, cy). The first tip points up; rotation turns it clockwise in degrees; roundness 0..1 rounds the corners.',
+  schema: z.strictObject({
+    ...common,
+    cx: Length,
+    cy: Length,
+    outer: Length,
+    inner: Length,
+    points: z.number().int().min(3).max(500),
+    rotation: z.number().optional(),
+    roundness: z.number().min(0).max(1).optional(),
+  }),
+  examples: [[{ op: 'star', id: 'badge', cx: 400, cy: 300, outer: 100, inner: 45, points: 5, style: { fill: '#ffb703' } }]],
+  handler(input, ctx) {
+    const cx = ctx.len(input.cx, 'x'), cy = ctx.len(input.cy, 'y');
+    const ro = positive('star', 'outer', ctx.len(input.outer, 'min'));
+    const ri = positive('star', 'inner', ctx.len(input.inner, 'min'));
+    const n = input.points, rotation = input.rotation ?? 0, roundness = input.roundness ?? 0;
+    const pts = Array.from({ length: 2 * n }, (_, k): Vec2 => {
+      const r = k % 2 === 0 ? ro : ri;
+      const [c, s] = cosSinDeg(rotation - 90 + (180 * k) / n);
+      return [cx + r * c, cy + r * s];
+    });
+    let sp = polyline(pts, true);
+    if (roundness > 0) {
+      const edge = Math.hypot(pts[1]![0] - pts[0]![0], pts[1]![1] - pts[0]![1]);
+      sp = roundCorners(sp, roundness * edge).subpath;
+    }
+    return { id: addPath(ctx, input, { prefix: 'star', subpaths: [sp], source: { kind: 'star', cx, cy, outer: ro, inner: ri, points: n, rotation, roundness } }) };
+  },
+});
