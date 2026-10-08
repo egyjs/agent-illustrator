@@ -7,6 +7,12 @@
   "files": ["dist"],
   "engines": { "node": ">=22.18" },
   "scripts": { "build": "tsdown" },
+  "dependencies": {
+    "culori": "catalog:",
+    "immer": "catalog:",
+    "paper": "catalog:",
+    "zod": "catalog:"
+  },
   "devDependencies": {
     "@agent-illustrator/agent-kit": "workspace:*",
     "@agent-illustrator/engine": "workspace:*",

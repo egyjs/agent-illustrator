@@ -97,6 +97,19 @@ importers:
         version: 4.0.1
 
   packages/mcp-server:
+    dependencies:
+      culori:
+        specifier: 'catalog:'
+        version: 4.0.2
+      immer:
+        specifier: 'catalog:'
+        version: 11.1.21
+      paper:
+        specifier: 'catalog:'
+        version: 0.12.18
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@agent-illustrator/agent-kit':
         specifier: workspace:*

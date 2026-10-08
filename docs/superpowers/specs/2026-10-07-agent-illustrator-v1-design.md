@@ -35,7 +35,7 @@ Status legend:
 - Bundled fonts live in `packages/engine/assets/fonts/`. The runtime passes font file paths to the engine, so the engine never guesses install paths.
 - A private `spikes/` workspace package holds the M0 learning tests. Each spike test is deleted once the engine module that supersedes it has its own tests: R1 → M1, R4 → M3, R2 → M8.
 
-## A3. Scene model (Proposed; confirm before the M2 plan)
+## A3. Scene model (Adopted as the default with the M2 plan, 2026-10-08; owner may still object)
 
 ```ts
 type Doc = {
@@ -61,6 +61,11 @@ type Text  = Base & { type: 'text'; content: string; font: FontSpec; anchor: Tex
 4. **Derived data is not stored.** World transforms and exact bounds are computed on demand and cached in a `WeakMap` keyed by node object. Immer structural sharing keeps untouched nodes identical, so caches survive across batches without invalidation code (FR-1.4).
 5. **Tokens are live references.** A style color `"palette.primary"` is resolved at render time. `export_svg` writes the resolved colors directly into the SVG.
 6. **Randomness is derived per node:** `alea(seed, nodeId, salt?)`, with no shared stream. The same op gives the same result after undo or replay, and editing an earlier op does not reshuffle later generators. Generators accept an optional `seed` override. Satisfies D13 and NFR-4 with no RNG state stored in the document.
+7. **Refinements in M2 (2026-10-08):**
+   - World-transform caches are validated against the parent's world matrix, because an ancestor can change while a node object stays shared. Point 4 holds for per-node data only.
+   - `defs` arrive with M5 (gradients, filters) and `text` with M8.
+   - Ids also reject `canvas`, a leading `__`, and Object.prototype names.
+   - Paints are CSS colors (via culori), `none`, or token names. SVG output always carries `#rrggbb` or `rgba()`.
 
 ## Open suggestions (Pending evidence)
 Record each outcome here with a date and the evidence (spike test name or doc link).
@@ -71,7 +76,7 @@ Record each outcome here with a date and the evidence (spike test name or doc li
 | S2 | Text bounds from resvg `getBBox()` on a single-text SVG instead of `opentype.js` | Uses the same shaper as the final render, covers Arabic, removes a dependency | Spike R2 |
 | S3 | Drop `bezier-js` from v1 | Its only planned use (offset) is out of scope per §4.3; the Appendix A math is hand-written in M1 | YAGNI. Re-add in post-v1 offset work |
 | S4 | Replace `tsup` if it is unmaintained; publish ONE npm package (the server, bundling `engine` and `agent-kit` content) | Clean `npx` (NFR-6); no 3-package publishing | Library check plus M0 Task 1 |
-| S5 | Merge op variants: `boolean {mode}`, one `transform {translate?, rotate?, scale?, skew?, matrix?, pivot?}`, `array {kind}`, `gradient {type}` → about 35 ops instead of 60 | Less registry, doc and example boilerplate; smaller catalog for models to learn | Decide in the M2 plan (registry) |
+| S5 | Merge op variants: `boolean {mode}`, one `transform {translate?, rotate?, scale?, skew?, matrix?, pivot?}`, `array {kind}`, `gradient {type}` → about 35 ops instead of 60 | Less registry, doc and example boilerplate; smaller catalog for models to learn | **Adopted** in the M2 plan (2026-10-08): merged variants; M2 ops unaffected |
 | S6 | Use `paper` core headless without `paper-jsdom`, if booleans, `smooth` and `simplify` work | Drops jsdom: lighter install and faster cold start | Spike R1 |
 | S7 | NFR-2 timeouts as input caps plus cooperative deadline checks in loops the engine owns | Synchronous CPU work (paper.js booleans, resvg render) cannot be preempted in-process without worker threads, and worker pools are out of scope per §4.3 | Decide in the M3 plan; document the limit in the README |
 
