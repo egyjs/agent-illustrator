@@ -39,6 +39,9 @@ catalogs:
     pino:
       specifier: ^10.4.0
       version: 10.4.0
+    rbush:
+      specifier: ^4.0.1
+      version: 4.0.1
     svgo:
       specifier: ^4.1.0
       version: 4.1.0
@@ -97,6 +100,9 @@ importers:
       paper:
         specifier: 'catalog:'
         version: 0.12.18
+      rbush:
+        specifier: 'catalog:'
+        version: 4.0.1
       svgo:
         specifier: 'catalog:'
         version: 4.1.0
@@ -1152,6 +1158,12 @@ packages:
 
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
+
+  quickselect@3.0.0:
+    resolution: {integrity: sha512-XdjUArbK4Bm5fLLvlm5KpTFOiOThgfWWI4axAZDWg4E/0mKdZyI9tNEfds27qCi1ze/vwTR16kvmmGhRra3c2g==}
+
+  rbush@4.0.1:
+    resolution: {integrity: sha512-IP0UpfeWQujYC8Jg162rMNc01Rf0gWMMAb2Uxus/Q0qOFw4lCcq6ZnQEZwUoJqWyUGJ9th7JjwI4yIWo+uvoAQ==}
 
   real-require@1.0.0:
     resolution: {integrity: sha512-P4nbQYQfePJxRSmY+v/KINxVucm4NF3p3s7pJveMTtom52FR4YGltUQLB8idDXwDDWW+eYrWDFbuzUnjoWHF7g==}
@@ -2245,6 +2257,12 @@ snapshots:
   quansync@1.0.0: {}
 
   quick-format-unescaped@4.0.4: {}
+
+  quickselect@3.0.0: {}
+
+  rbush@4.0.1:
+    dependencies:
+      quickselect: 3.0.0
 
   real-require@1.0.0: {}
 
