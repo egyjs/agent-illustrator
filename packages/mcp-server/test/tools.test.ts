@@ -19,8 +19,18 @@ const open = (d: ToolDeps) => json(createDocumentTool(d, { width: 200, height: 1
 describe('tools: create_document', () => {
   it('returns a doc_id, the canvas and the seed', () => {
     const d = deps();
-    expect(json(createDocumentTool(d, { width: 200, height: 100, seed: 7 }))).toEqual({ doc_id: 'doc-1', width: 200, height: 100, seed: 7 });
+    const r = json(createDocumentTool(d, { width: 200, height: 100, seed: 7 }));
+    expect(r).toMatchObject({ width: 200, height: 100, seed: 7 });
+    expect(r.doc_id).toMatch(/^doc-[0-9a-f]{6}$/);
     expect(typeof json(createDocumentTool(d, { width: 10, height: 10 })).seed).toBe('number');
+  });
+
+  it('malformed input is an invalid_input result with a hint, validated by the tool itself', () => {
+    const r = createDocumentTool(deps(), { width: 'big', height: 10 });
+    expect(r.isError).toBe(true);
+    expect(json(r)).toMatchObject({ error: { code: 'invalid_input' } });
+    expect((json(r).error as { hint: string }).hint).toContain('"width"');
+    expect(json(applyOpsTool(deps(), { doc_id: 'x', ops: 'rect' }))).toMatchObject({ error: { code: 'invalid_input' } });
   });
 
   it('a bad background returns isError with code, message and hint', () => {
@@ -97,6 +107,16 @@ describe('tools: render and export_svg', () => {
     expect(image.mimeType).toBe('image/png');
     expect(Buffer.from(image.data, 'base64').subarray(1, 4).toString('ascii')).toBe('PNG');
     expect(existsSync(summary.file)).toBe(true);
+  });
+
+  it('each render gets its own file, so a zoom does not overwrite the full view', () => {
+    const d = deps();
+    const id = open(d);
+    const file = (r: ToolResult) => json(r).file as string;
+    const first = file(renderTool(d, { doc_id: id }));
+    const second = file(renderTool(d, { doc_id: id, scale: 2 }));
+    expect(first).not.toBe(second);
+    expect(existsSync(first) && existsSync(second)).toBe(true);
   });
 
   it('render above the pixel cap is an error result', () => {

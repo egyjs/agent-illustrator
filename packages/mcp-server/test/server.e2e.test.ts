@@ -13,27 +13,40 @@ const env = { ...process.env, AGENT_ILLUSTRATOR_RENDER_DIR: renderDir, AGENT_ILL
 type Block = { type: string; text?: string; data?: string; mimeType?: string };
 const body = (res: { content: unknown }) => JSON.parse((res.content as Block[])[0]!.text!) as Record<string, unknown>;
 
-/** Sends a raw initialize request and resolves with every complete stdout line up to the response. */
-function rawInitialize(): Promise<string[]> {
+/**
+ * A raw stdio session at info log level: initialize, create a document, render it with every overlay.
+ * Resolves with every complete stdout line, so a stray log line or library print is caught.
+ */
+function rawSession(): Promise<string[]> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [cli], { stdio: ['pipe', 'pipe', 'pipe'], env });
+    const child = spawn(process.execPath, [cli], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...env, AGENT_ILLUSTRATOR_LOG_LEVEL: 'info' } });
     let buf = '';
+    const send = (msg: object) => child.stdin.write(`${JSON.stringify(msg)}\n`);
     const timer = setTimeout(() => {
       child.kill();
-      reject(new Error(`no initialize response; stdout so far: ${buf}`));
-    }, 15_000);
+      reject(new Error(`raw session stalled; stdout so far: ${buf}`));
+    }, 20_000);
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
       buf += chunk;
       const complete = buf.split('\n').slice(0, -1).filter((l) => l.trim() !== '');
-      if (complete.some((l) => l.includes('"id":1'))) {
+      const reply = (id: number) => complete.find((l) => l.includes(`"id":${id},`) || l.includes(`"id":${id}}`));
+      if (reply(1) && !complete.some((l) => l.includes('"id":2'))) {
+        send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+        send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'create_document', arguments: { width: 100, height: 80 } } });
+      }
+      const created = reply(2);
+      if (created && !buf.includes('"id":3')) {
+        const docId = (JSON.parse(JSON.parse(created).result.content[0].text) as { doc_id: string }).doc_id;
+        send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'render', arguments: { doc_id: docId, overlays: ['ids', 'bounds', 'grid'] } } });
+      }
+      if (reply(3)) {
         clearTimeout(timer);
         child.kill();
         resolve(complete);
       }
     });
-    const init = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'raw', version: '0' } } };
-    child.stdin.write(`${JSON.stringify(init)}\n`);
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'raw', version: '0' } } });
   });
 }
 
@@ -49,11 +62,27 @@ describe('agent-illustrator over stdio', () => {
     await client.close();
   });
 
-  it('writes nothing but JSON-RPC lines to stdout', async () => {
-    const lines = await rawInitialize();
-    expect(lines.length).toBeGreaterThan(0);
-    for (const line of lines) expect(() => JSON.parse(line)).not.toThrow();
-  }, 20_000);
+  it('writes nothing but JSON-RPC messages to stdout, even with info logs and a render', async () => {
+    const lines = await rawSession();
+    expect(lines.length).toBeGreaterThanOrEqual(3);
+    for (const line of lines) expect((JSON.parse(line) as { jsonrpc?: string }).jsonrpc).toBe('2.0');
+  }, 30_000);
+
+  it('schema-level mistakes come back with code, message and hint', async () => {
+    const docId = body(await client.callTool({ name: 'create_document', arguments: { width: 100, height: 100 } })).doc_id as string;
+    const expectError = async (args: Record<string, unknown>, code: string) => {
+      const res = await client.callTool({ name: 'apply_ops', arguments: args });
+      expect(res.isError).toBe(true);
+      const error = (body(res).error ?? (body(res).results as { error?: unknown }[]).find((r) => r.error)?.error) as { code: string; hint: string };
+      expect(error.code).toBe(code);
+      expect(error.hint.length).toBeGreaterThan(5);
+    };
+    await expectError({ doc_id: docId, ops: [{ op: 'elipse', cx: 1, cy: 1, rx: 1 }] }, 'unknown_op');
+    await expectError({ doc_id: docId, ops: 'rect' }, 'invalid_input');
+    await expectError({ doc_id: docId, ops: Array.from({ length: 201 }, () => ({ op: 'rect', x: 0, y: 0, width: 1, height: 1 })) }, 'limit_exceeded');
+    const render = await client.callTool({ name: 'render', arguments: { doc_id: docId, scale: 100 } });
+    expect(body(render)).toMatchObject({ error: { code: 'invalid_input' } });
+  }, 30_000);
 
   it('serves the core contract as instructions and lists four tools with portable schemas', async () => {
     expect(client.getInstructions()).toContain('apply_ops');

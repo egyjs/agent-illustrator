@@ -51,4 +51,7 @@ Set with environment variables. Exceeding a limit returns an error that says whi
 | `AGENT_ILLUSTRATOR_LOG_LEVEL` (stderr JSON logs) | `info` |
 
 Heavy work (booleans, renders) runs synchronously and is bounded by these caps rather than by timeouts.
-Documents live in memory for the life of the server process.
+Documents live in memory for the life of the server process, under random ids (`doc-3f9a1c`). When the
+document limit is reached, the least recently used document is closed; asking for it later says so.
+Each render is also written to `<RENDER_DIR>/<doc_id>-<n>.png` (the last 4 per document) for clients
+that do not show images.

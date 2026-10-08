@@ -26,6 +26,10 @@ export type Raster = { readonly width: number; readonly height: number; readonly
 
 export const MAX_RENDER_PIXELS = 4096 * 4096;
 export const MAX_SCALE = 8;
+/** Render regions stay within this distance of the canvas origin; far beyond, floats lose whole pixels. */
+export const MAX_REGION_COORD = 1e6;
+/** Grid lines are at least this many output pixels apart. */
+const MIN_GRID_PX = 8;
 
 /** SVG → PNG through resvg, with optional region crop, scale and overlays (FR-11.1). */
 export function rasterize(doc: Doc, options: RasterOptions = {}): Raster {
@@ -36,6 +40,17 @@ export function rasterize(doc: Doc, options: RasterOptions = {}): Raster {
   const region = options.region ?? { x: 0, y: 0, width: doc.canvas.width, height: doc.canvas.height };
   if (!(region.width > 0 && region.height > 0)) {
     throw new EngineError('invalid_input', 'render region needs a positive width and height', 'Give region as { x, y, width, height } in canvas units.');
+  }
+  const far = [region.x, region.y, region.x + region.width, region.y + region.height].some((v) => !(Math.abs(v) <= MAX_REGION_COORD));
+  if (far) {
+    throw new EngineError('invalid_input', `render region must stay within ±${MAX_REGION_COORD} canvas units`, 'Render an area at or near the canvas, e.g. { x: 0, y: 0, width: 400, height: 300 }.');
+  }
+  if (options.grid !== undefined && options.grid * scale < MIN_GRID_PX) {
+    throw new EngineError(
+      'invalid_input',
+      `grid spacing ${options.grid} is under ${MIN_GRID_PX} output pixels at scale ${scale}`,
+      `Use grid ${Math.ceil((MIN_GRID_PX / scale) * 100) / 100} or more, or leave grid out for an automatic step.`,
+    );
   }
   const width = Math.max(1, Math.round(region.width * scale));
   const height = Math.max(1, Math.round(region.height * scale));
@@ -63,11 +78,41 @@ export function rasterize(doc: Doc, options: RasterOptions = {}): Raster {
   return { width: image.width, height: image.height, png: image.asPng(), pixels: image.pixels };
 }
 
-/** A round step (1, 2 or 5 × 10^k) near a tenth of the shorter side. */
-function niceStep(span: number): number {
-  const raw = span / 10;
-  const pow = 10 ** Math.floor(Math.log10(raw));
-  return [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= raw) ?? raw;
+/** The smallest round step (1, 2 or 5 × 10^k) that is at least `min`. */
+function roundUp(min: number): number {
+  const pow = 10 ** Math.floor(Math.log10(min));
+  return [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= min) ?? min;
+}
+
+/** Lines at whole multiples of `step` inside [from, to], by integer index so no float drift or runaway loop. */
+function gridLines(from: number, to: number, step: number): number[] {
+  const first = Math.ceil(from / step), last = Math.floor(to / step);
+  return Array.from({ length: Math.max(0, last - first + 1) }, (_, k) => (first + k) * step);
+}
+
+export type LabelBox = { readonly id: string; readonly x: number; readonly y: number; readonly w: number; readonly h: number };
+
+/**
+ * Where the ids overlay puts each label, in canvas units:
+ * - Groups come first and leaves last, so leaf labels draw on top.
+ * - Each label starts at the top-left of the node's visible part, so zoomed renders still label
+ *   nodes that begin outside the view.
+ * - A label that would cover an earlier one moves down until it is clear.
+ * Nodes outside the region get no label.
+ */
+export function labelLayout(nodes: readonly { id: string; box: Box; group: boolean }[], region: Box, px: number): LabelBox[] {
+  const ordered = [...nodes.filter((n) => n.group), ...nodes.filter((n) => !n.group)];
+  const placed: LabelBox[] = [];
+  const hits = (a: LabelBox) => placed.some((b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h);
+  for (const { id, box } of ordered) {
+    const x0 = Math.max(box.x, region.x), y0 = Math.max(box.y, region.y);
+    if (x0 > Math.min(box.x + box.width, region.x + region.width) || y0 > Math.min(box.y + box.height, region.y + region.height)) continue;
+    const h = 14 * px;
+    let label: LabelBox = { id, x: x0, y: y0, w: (id.length * 6.5 + 4) * px, h };
+    for (let tries = 0; tries < 20 && hits(label); tries++) label = { ...label, y: label.y + h };
+    placed.push(label);
+  }
+  return placed;
 }
 
 function overlaySvg(doc: Doc, region: Box, scale: number, overlays: readonly Overlay[], gridStep?: number): string {
@@ -76,37 +121,34 @@ function overlaySvg(doc: Doc, region: Box, scale: number, overlays: readonly Ove
   const f = (v: number) => String(Number(v.toFixed(3)));
   const parts: string[] = ['<g id="__overlay">'];
   if (overlays.includes('grid')) {
-    const step = gridStep ?? niceStep(Math.min(doc.canvas.width, doc.canvas.height));
+    const step = gridStep ?? roundUp(Math.max(Math.min(region.width, region.height) / 10, MIN_GRID_PX * px));
     const label = `font-size="${f(10 * px)}" fill="#00708f"`;
-    for (let x = Math.ceil(region.x / step) * step; x <= region.x + region.width; x += step) {
+    for (const x of gridLines(region.x, region.x + region.width, step)) {
       parts.push(`<path d="M${f(x)} ${f(region.y)} V${f(region.y + region.height)}" stroke="#00a6d6" stroke-opacity="0.45" stroke-width="${f(px)}"/>`);
       parts.push(`<text x="${f(x + 2 * px)}" y="${f(region.y + 10 * px)}" ${label}>${f(x)}</text>`);
     }
-    for (let y = Math.ceil(region.y / step) * step; y <= region.y + region.height; y += step) {
+    for (const y of gridLines(region.y, region.y + region.height, step)) {
       parts.push(`<path d="M${f(region.x)} ${f(y)} H${f(region.x + region.width)}" stroke="#00a6d6" stroke-opacity="0.45" stroke-width="${f(px)}"/>`);
       parts.push(`<text x="${f(region.x + 2 * px)}" y="${f(y - 2 * px)}" ${label}>${f(y)}</text>`);
     }
   }
-  const ids = Object.keys(doc.nodes);
+  const boxes = Object.keys(doc.nodes).flatMap((id) => {
+    const box = worldBounds(doc, id);
+    return box ? [{ id, box, group: doc.nodes[id]!.type === 'group' }] : [];
+  });
   if (overlays.includes('bounds')) {
-    for (const id of ids) {
-      const b = worldBounds(doc, id);
-      if (!b) continue;
-      const color = doc.nodes[id]!.type === 'group' ? '#7a00ff' : '#ff00aa';
+    for (const { box: b, group } of boxes) {
       parts.push(
-        `<rect x="${f(b.x)}" y="${f(b.y)}" width="${f(b.width)}" height="${f(b.height)}" fill="none" stroke="${color}" ` +
+        `<rect x="${f(b.x)}" y="${f(b.y)}" width="${f(b.width)}" height="${f(b.height)}" fill="none" stroke="${group ? '#7a00ff' : '#ff00aa'}" ` +
           `stroke-width="${f(px)}" stroke-dasharray="${f(4 * px)} ${f(3 * px)}"/>`,
       );
     }
   }
   if (overlays.includes('ids')) {
-    for (const id of ids) {
-      const b = worldBounds(doc, id);
-      if (!b) continue;
-      const size = 11 * px;
+    for (const l of labelLayout(boxes, region, px)) {
       parts.push(
-        `<rect x="${f(b.x)}" y="${f(b.y)}" width="${f((id.length * 6.5 + 4) * px)}" height="${f(14 * px)}" fill="#ffffff" fill-opacity="0.85"/>`,
-        `<text x="${f(b.x + 2 * px)}" y="${f(b.y + 11 * px)}" font-size="${f(size)}" fill="#c00070">${id}</text>`,
+        `<rect x="${f(l.x)}" y="${f(l.y)}" width="${f(l.w)}" height="${f(l.h)}" fill="#ffffff" fill-opacity="0.85"/>`,
+        `<text x="${f(l.x + 2 * px)}" y="${f(l.y + 11 * px)}" font-size="${f(11 * px)}" fill="#c00070">${l.id}</text>`,
       );
     }
   }

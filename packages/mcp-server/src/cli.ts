@@ -30,7 +30,8 @@ if (arg === '--version') {
   const config = loadConfig();
   const log = createLogger(config.logLevel);
   const instructions = readFileSync(join(agentKitDir(), 'core-contract.md'), 'utf8');
-  const deps = { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), log };
+  const sessions = new MemorySessionStore(config.maxDocuments, (id) => log.warn({ doc_id: id, limit: config.maxDocuments }, 'closed the least recently used document'));
+  const deps = { sessions, registry: createRegistry(), config, fonts: fontFiles(), log };
   log.info({ version: pkg.version, limits: config.limits }, 'serving MCP over stdio');
   await serveStdio(() => createServer(deps, instructions));
 } else {

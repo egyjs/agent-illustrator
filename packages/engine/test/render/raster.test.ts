@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createRegistry } from '../../src/ops/index.ts';
 import { executeBatch } from '../../src/ops/registry.ts';
-import { rasterize, type Raster, type RasterFonts } from '../../src/render/raster.ts';
+import { labelLayout, rasterize, type Raster, type RasterFonts } from '../../src/render/raster.ts';
 import { createDocument, type Doc } from '../../src/scene/model.ts';
 import { expectCode } from '../fixtures.ts';
 
@@ -79,6 +79,36 @@ describe('render/raster', () => {
     expect(ids.every(({ x, y }) => x >= 36 && x < 160 && y >= 36 && y < 120)).toBe(true);
     const grid = changed(plain, rasterize(doc, { scale: 4, fonts: FONTS, overlays: ['grid'], grid: 10 }));
     expect(grid.length).toBeGreaterThan(400);
+  });
+
+  it('refuses a grid finer than 8 output pixels and regions far off any canvas, quickly', () => {
+    const doc = scene('#ffffff');
+    const t0 = performance.now();
+    expectCode(() => rasterize(doc, { overlays: ['grid'], grid: 0.001 }), 'invalid_input');
+    expectCode(() => rasterize(doc, { overlays: ['grid'], region: { x: 1e20, y: 0, width: 100, height: 100 } }), 'invalid_input');
+    expect(performance.now() - t0).toBeLessThan(1000);
+    const tiny = rasterize(doc, { overlays: ['grid'], region: { x: 10, y: 10, width: 4, height: 4 }, scale: 8 });
+    expect([tiny.width, tiny.height]).toEqual([32, 32]);
+  });
+
+  it('labelLayout keeps labels inside the region, apart, with leaves drawn after groups', () => {
+    const region = { x: 0, y: 0, width: 200, height: 100 };
+    const labels = labelLayout(
+      [
+        { id: 'child', box: { x: 10, y: 10, width: 50, height: 50 }, group: false },
+        { id: 'house', box: { x: 10, y: 10, width: 100, height: 60 }, group: true },
+        { id: 'sun', box: { x: 150, y: -40, width: 80, height: 80 }, group: false },
+        { id: 'far', box: { x: 500, y: 500, width: 10, height: 10 }, group: false },
+      ],
+      region,
+      1,
+    );
+    expect(labels.map((l) => l.id)).toEqual(['house', 'child', 'sun']);
+    const sun = labels.find((l) => l.id === 'sun')!;
+    expect([sun.x, sun.y]).toEqual([150, 0]);
+    const [a, b] = [labels[0]!, labels[1]!];
+    const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    expect(overlap).toBe(false);
   });
 
   it('is deterministic', () => {

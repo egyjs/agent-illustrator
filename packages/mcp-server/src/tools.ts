@@ -44,6 +44,16 @@ function guarded(deps: ToolDeps, tool: string, body: () => ToolResult): ToolResu
   }
 }
 
+/**
+ * Validates tool input in the handler, not in the SDK, so every mistake gets the same
+ * { code, message, hint } shape as engine errors and shows up in the logs (NFR-3, NFR-5).
+ */
+function parse<S extends z.ZodType>(schema: S, input: unknown, tool: string, example: unknown): z.output<S> {
+  const r = schema.safeParse(input);
+  if (!r.success) throw new EngineError('invalid_input', `${tool}: ${z.prettifyError(r.error)}`, `Example: ${JSON.stringify(example)}`);
+  return r.data;
+}
+
 const round = (v: number) => Math.round(v * 100) / 100;
 const roundBox = (b: Box) => ({ x: round(b.x), y: round(b.y), width: round(b.width), height: round(b.height) });
 
@@ -61,8 +71,9 @@ export const createDocumentInput = z.object({
   seed: z.number().int().optional().describe('Seed for generators; omit for a random one (returned)'),
 });
 
-export function createDocumentTool(deps: ToolDeps, input: z.output<typeof createDocumentInput>): ToolResult {
+export function createDocumentTool(deps: ToolDeps, raw: unknown): ToolResult {
   return guarded(deps, 'create_document', () => {
+    const input = parse(createDocumentInput, raw, 'create_document', { width: 800, height: 600, background: '#ffffff' });
     const seed = input.seed ?? randomInt(0, 2 ** 31);
     const doc = createDocument({ width: input.width, height: input.height, seed, ...(input.background === undefined ? {} : { background: input.background }) });
     const session = deps.sessions.create(doc);
@@ -104,10 +115,12 @@ export function opSignatures(registry: Registry): string {
     .join('\n');
 }
 
-export type ApplyOpsInput = { doc_id: string; ops: unknown[]; dry_run?: boolean };
+/** The shape check only; op names, op fields and the batch size are the engine's to judge, with its hints. */
+const applyOpsInput = z.strictObject({ doc_id: z.string(), ops: z.array(z.unknown()), dry_run: z.boolean().optional() });
 
-export function applyOpsTool(deps: ToolDeps, input: ApplyOpsInput): ToolResult {
+export function applyOpsTool(deps: ToolDeps, raw: unknown): ToolResult {
   return guarded(deps, 'apply_ops', () => {
+    const input = parse(applyOpsInput, raw, 'apply_ops', { doc_id: 'doc-1a2b3c', ops: [{ op: 'rect', x: 10, y: 10, width: 100, height: 50 }] });
     const session = deps.sessions.get(input.doc_id);
     const result = executeBatch(deps.registry, session.store.doc, input.ops, {
       dryRun: input.dry_run ?? false,
@@ -133,8 +146,12 @@ export const renderInput = z.object({
   grid: z.number().positive().optional().describe('Grid spacing in canvas px'),
 });
 
-export function renderTool(deps: ToolDeps, input: z.output<typeof renderInput>): ToolResult {
+/** Each document keeps its last few render files, so a zoomed render does not overwrite the full view. */
+const RENDER_FILES_PER_DOC = 4;
+
+export function renderTool(deps: ToolDeps, raw: unknown): ToolResult {
   return guarded(deps, 'render', () => {
+    const input = parse(renderInput, raw, 'render', { doc_id: 'doc-1a2b3c', overlays: ['ids'] });
     const session = deps.sessions.get(input.doc_id);
     const raster = rasterize(session.store.doc, {
       ...(input.scale === undefined ? {} : { scale: input.scale }),
@@ -147,7 +164,7 @@ export function renderTool(deps: ToolDeps, input: z.output<typeof renderInput>):
     let file: string | undefined;
     try {
       mkdirSync(deps.config.renderDir, { recursive: true });
-      file = join(deps.config.renderDir, `${session.id}.png`);
+      file = join(deps.config.renderDir, `${session.id}-${session.renders++ % RENDER_FILES_PER_DOC}.png`);
       writeFileSync(file, raster.png);
     } catch (e) {
       deps.log.warn({ err: e }, 'could not write the render fallback file');
@@ -165,8 +182,9 @@ export const exportSvgInput = z.object({
   strip_ids: z.boolean().optional().describe('Remove id attributes; default false'),
 });
 
-export function exportSvgTool(deps: ToolDeps, input: z.output<typeof exportSvgInput>): ToolResult {
+export function exportSvgTool(deps: ToolDeps, raw: unknown): ToolResult {
   return guarded(deps, 'export_svg', () => {
+    const input = parse(exportSvgInput, raw, 'export_svg', { doc_id: 'doc-1a2b3c' });
     const session = deps.sessions.get(input.doc_id);
     const svg = exportSvg(session.store.doc, {
       ...(input.precision === undefined ? {} : { precision: input.precision }),
