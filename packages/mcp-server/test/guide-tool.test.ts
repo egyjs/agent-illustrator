@@ -106,6 +106,15 @@ describe('guide tool', () => {
     expect(error(r)).toMatchObject({ code: 'invalid_input' });
     expect(error(r).hint).toContain('Example');
   });
+
+  it('refuses a topic over 200 characters before looking for it', () => {
+    expect(guide({ topic: 'x'.repeat(200) }).isError).toBe(true);
+    const r = guide({ topic: 'x'.repeat(201) });
+    expect(error(r)).toMatchObject({ code: 'invalid_input' });
+    expect(error(r).message).toContain('guide:');
+    expect(error(r).message).not.toContain('xxxxxxxxxx');
+    expect(error(r).hint).toContain('Example');
+  });
 });
 
 describe('illustrate prompt', () => {

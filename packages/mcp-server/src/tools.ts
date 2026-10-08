@@ -69,6 +69,9 @@ function compact(o: OpOutcome): Record<string, unknown> {
   return { ...rest, ...(bounds ? { bounds: roundBox(bounds) } : {}), ...(warnings.length > 0 ? { warnings } : {}) };
 }
 
+/** The reply field that names documents closed to make room; nothing when none were. */
+export const closedNote = (closed: readonly string[]): { closed?: readonly string[] } => (closed.length > 0 ? { closed } : {});
+
 export const createDocumentInput = z.object({
   width: z.number().positive().max(16384).describe('Canvas width in px'),
   height: z.number().positive().max(16384).describe('Canvas height in px'),
@@ -81,8 +84,8 @@ export function createDocumentTool(deps: ToolDeps, raw: unknown): ToolResult {
     const input = parse(createDocumentInput, raw, 'create_document', { width: 800, height: 600, background: '#ffffff' });
     const seed = input.seed ?? randomInt(0, 2 ** 31);
     const doc = createDocument({ width: input.width, height: input.height, seed, ...(input.background === undefined ? {} : { background: input.background }) });
-    const session = deps.sessions.create(doc);
-    return { content: [text({ doc_id: session.id, width: doc.canvas.width, height: doc.canvas.height, seed })] };
+    const { session, closed } = deps.sessions.create(doc);
+    return { content: [text({ doc_id: session.id, width: doc.canvas.width, height: doc.canvas.height, seed, ...closedNote(closed) })] };
   });
 }
 

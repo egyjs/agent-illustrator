@@ -1,4 +1,4 @@
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_LIMITS, MAX_RENDER_PIXELS } from '@agent-illustrator/engine';
 import { describe, expect, it } from 'vitest';
@@ -11,9 +11,18 @@ describe('loadConfig', () => {
       maxDocuments: 50,
       maxRenderPixels: MAX_RENDER_PIXELS,
       renderDir: join(tmpdir(), 'agent-illustrator'),
-      docsDir: join(tmpdir(), 'agent-illustrator', 'docs'),
+      docsDir: join(homedir(), process.platform === 'win32' ? join('AppData', 'Local') : join('.local', 'state'), 'agent-illustrator', 'docs'),
       logLevel: 'info',
     });
+  });
+
+  it('keeps saved documents in a per-user folder, not the shared temp folder', () => {
+    const win = 'C:/Users/me/AppData/Local';
+    expect(loadConfig({ LOCALAPPDATA: win }, 'win32').docsDir).toBe(join(win, 'agent-illustrator', 'docs'));
+    expect(loadConfig({}, 'win32').docsDir).toBe(join(homedir(), 'AppData', 'Local', 'agent-illustrator', 'docs'));
+    expect(loadConfig({ XDG_STATE_HOME: '/var/state' }, 'linux').docsDir).toBe(join('/var/state', 'agent-illustrator', 'docs'));
+    expect(loadConfig({}, 'darwin').docsDir).toBe(join(homedir(), '.local', 'state', 'agent-illustrator', 'docs'));
+    expect(loadConfig({ AGENT_ILLUSTRATOR_DOCS_DIR: '/my/docs' }, 'linux').docsDir).toBe('/my/docs');
   });
 
   it('reads positive integer limits and paths from AGENT_ILLUSTRATOR_* variables', () => {

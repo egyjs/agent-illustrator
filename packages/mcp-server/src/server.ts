@@ -141,7 +141,7 @@ export function createServer(deps: ToolDeps, kit: AgentKit): McpServer {
     'document_io',
     {
       title: 'Document I/O',
-      description: 'Save a document to disk by name, load a saved one as a new document, or list saved documents.',
+      description: 'Save a document to disk by name (names are lowercased), load a saved one as a new document, or list saved documents.',
       inputSchema: advertise(z.toJSONSchema(documentIoInput)),
     },
     async (input) => logged(deps, 'document_io', input, () => documentIoTool(deps, input)),

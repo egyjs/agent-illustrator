@@ -12,13 +12,13 @@ Tools: `render`, `lint`, `describe_scene`, `measure`. Check after each stage, no
 - `measure` with `ids` returns bounds, center, area and path length per node; with 2-12 ids also the center distance, `gap` on each axis and whether and how much shapes `overlap`. Use it to check spacing, sizes and that a lid sits on its jar.
 
 ## lint
-- `lint` returns `issues`: `{code, severity, ids, message, hint, fix?}`, warnings first. `fix` is a ready op call. Optional `checks` picks checks (`off_canvas`, `degenerate`, `tiny`, `near_miss`, `text_overlap`, `contrast`, `overlap`; the last is off by default), `ids` limits it to those nodes and the pairs they form, `tolerance` sets the near-miss distance in px.
+- `lint` returns `issues`: `{code, severity, ids, message, hint, fix?}`, warnings first, each group in order of importance (`off_canvas` first). `fix` is a ready op call. Optional `checks` picks checks (`off_canvas`, `degenerate`, `tiny`, `near_miss`, `text_overlap`, `contrast`, `overlap`; the last is off by default), `ids` limits it to those nodes and the pairs they form, `tolerance` sets the near-miss distance in px.
 - `off_canvas`: a shape lies fully outside the canvas. Move it in (the fix places it at the center) or delete it. `partly_off_canvas` (info) is fine for a deliberate bleed.
 - `degenerate`, `empty_group`, `no_ink`: nothing visible is there. Delete it or find the op that failed to draw it.
 - `tiny` (info): a shape smaller than a couple of units. Enlarge it or delete it.
-- `near_miss`: two siblings that almost line up on an edge or center. Apply the `align` fix, or move one deliberately if the offset is a design choice.
+- `near_miss`: two nearby siblings (within a tenth of the canvas) whose edge or center misses by more than 0.5 px but less than `tolerance`. Edges at the canvas edge are ignored, and at most 10 are reported. Apply the `align` fix, or move one deliberately if the offset is a design choice.
 - `text_overlap`: two labels collide. Move one with `place`, shorten, or shrink it.
-- `low_contrast`: text is hard to read on what is behind it. The `fix` restyles the text color; or change the background.
+- `low_contrast`: text is hard to read on what is behind it, as drawn at its opacity. Text over empty transparent canvas is skipped. The `fix` restyles the text color, and is left out when no color would pass at that opacity; or change the background.
 - `overlap` (info) is off by default, since shapes overlap on purpose in drawings. Ask for it with `checks` when pieces should not touch (a layout, a chart).
 - Judge each issue: the fix repairs the number, not always the design.
 

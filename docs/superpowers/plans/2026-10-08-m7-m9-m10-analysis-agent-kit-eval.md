@@ -114,3 +114,19 @@
 - Register `describe_scene`, `measure`, `lint`, `history`, `document_io` in `server.ts` (read-only hints where true); e2e test expects the 10 tools; engine `src/index.ts` exports the analysis API.
 - READMEs: root `README.md` (what it is, install `npx agent-illustrator`, client setup for Claude Desktop/Code and others, the 10 tools, limits/env, known limitations → `docs/superpowers/plans/post-v1-backlog.md`), `packages/mcp-server/README.md` tool reference.
 - Then: review agent, fix agent, docs (roadmap, spec, execution record). Owner actions: GitHub repo + CI run, model runs on ≥ 2 families.
+
+---
+
+## Execution record (2026-10-08)
+- **Foundation** `63be004`, plan `b2bf964` (orchestrator).
+- **Wave 1**, seven Sonnet agents in parallel, no file conflicts: T1 describe/measure `f60cc83` (54 tests), T2 lint `d1f7746` (35), T3 history/document_io `b6cde31` (24), T4 agent-kit content `cb45674` (14 files, 16 runnable examples), T5 guide/prompt/kit loader/content CI check `092df49` (37), T6 render regression `6d9cbe4` (12 fixtures, 25 tests), T7 harness `c5f6372` (20 briefs, 20 tests). T5 waited on T4's prompt file, then reran green.
+- **Wave 2** `3795fc7`: analysis tools, incremental lint in `apply_ops`, 10 tools registered, root and server READMEs.
+- **Review** (Sonnet, 15 findings, most reproduced) and **fixes** (Sonnet): a resvg panic that killed the server on region renders with layered nodes (filter/mask/clip/opacity/blend) far from the crop, now pruned or rendered wider and cropped; `near_miss` noise (0.5 px alignment, neighbours only, bleeds ignored, capped; fixture issues 148 → 24); issue priority order; sibling and pair caps with `truncated`; per-user docs dir (0700, realpath checks, atomic lowercase saves); load limits and truncated echoes; `guide` topic cap; `describe_scene` 256 KB cap; eval no-doc runs marked unfinished and API keys redacted from errors; `$last` message; contrast on transparent canvases, with opacity, rechecked fixes and a 2 s budget; evicted sessions reported as `closed`.
+- **Totals:** 810 tests passing (1 POSIX-only skip) in 59 files; `pnpm check`, `pnpm build`, `pnpm smoke` green on Windows / Node 24.
+
+### Open owner actions (M9/M10 acceptance)
+1. Create the GitHub repo and push; the first CI run checks Linux (regression baselines were made on Windows; if pixel diffs exceed 0.5% there, regenerate with `pnpm --filter @agent-illustrator/eval baselines`).
+2. Run the harness on at least two model families (`eval/README.md`: `pnpm build`, set `EVAL_API_KEY` and optionally `EVAL_BASE_URL`, then `node eval/src/run.ts --model <id> --mode both` and `node eval/src/report.ts <run-dir>`), score with `eval/rubric.md`, and turn stuck points in transcripts into better error hints.
+3. A fresh-model session completing a brief with guides alone (M9 acceptance) is covered by the same runs.
+
+Deferred items went to `post-v1-backlog.md` (undo-stack byte budget, nested-layer renders over `maxPixels` drawn flat).

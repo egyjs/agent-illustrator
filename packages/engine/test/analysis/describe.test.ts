@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { describeScene, round2, type NodeInfo, type SceneDescription } from '../../src/analysis/describe.ts';
+import { describeScene, MAX_DESCRIPTION_BYTES, round2, type NodeInfo, type SceneDescription } from '../../src/analysis/describe.ts';
+import type { Subpath } from '../../src/geometry/types.ts';
 import { createRegistry } from '../../src/ops/index.ts';
 import { executeBatch } from '../../src/ops/registry.ts';
 import type { RasterFonts } from '../../src/render/raster.ts';
@@ -228,6 +229,34 @@ describe('describeScene: maxNodes', () => {
 
   it.each([0, -1, 1.5, Number.NaN])('rejects maxNodes %s', (maxNodes) => {
     expectCode(() => describeScene(doc, { maxNodes }), 'invalid_input');
+  });
+});
+
+describe('describeScene: size cap', () => {
+  const square = (x: number) => ({ start: [x, 0] as [number, number], segs: [[x + 5, 0, x + 5, 0, x + 5, 0], [x + 5, 5, x + 5, 5, x + 5, 5], [x, 5, x, 5, x, 5], [x, 0, x, 0, x, 0]] as Subpath['segs'], closed: true });
+
+  it('stops adding nodes at about 256 KB and points to root and lower detail', () => {
+    const many = docOf(Array.from({ length: 2000 }, (_, i) => pathNode(`node_with_a_long_descriptive_id_${i}`.padEnd(60, '_'), [square(i)], { style: { fill: '#aabbcc', stroke: '#112233', strokeWidth: 2 } })));
+    const d = describeScene(many, { maxNodes: 2000 });
+    expect(d.truncated).toBe(true);
+    expect(d.shown).toBeGreaterThan(500);
+    expect(d.shown).toBeLessThan(2000);
+    expect(JSON.stringify(d).length).toBeLessThan(MAX_DESCRIPTION_BYTES * 1.05);
+    expect(d.hint).toContain('root');
+    expect(d.hint).toContain('lower detail');
+    // A cut by maxNodes alone has no hint.
+    expect(describeScene(many, { maxNodes: 10 })).not.toHaveProperty('hint');
+  });
+
+  it('stops at 20000 path segments at full detail, but always lists the first node', () => {
+    const wide = (x: number) => ({ start: [x, 0] as [number, number], segs: Array.from({ length: 15_000 }, (_, k) => [k, 1, k, 2, k, 3] as Subpath['segs'][number]), closed: false });
+    const doc = docOf([pathNode('a', [wide(0)]), pathNode('b', [wide(1)]), pathNode('c', [wide(2)])]);
+    const full = describeScene(doc, { detail: 'full' });
+    expect(full.nodes.map((n) => n.id)).toEqual(['a']);
+    expect([full.nodeCount, full.shown, full.truncated]).toEqual([3, 1, true]);
+    expect(full.hint).toBeDefined();
+    // The same document at normal detail lists the segments as a count only.
+    expect(describeScene(doc).nodes.map((n) => n.id)).toEqual(['a', 'b', 'c']);
   });
 });
 

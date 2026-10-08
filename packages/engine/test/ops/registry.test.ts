@@ -101,6 +101,8 @@ describe('ops/registry: executeBatch', () => {
     expect(r2.results[0]).toMatchObject({ ids: ['a'] });
     const r3 = executeBatch(registry, fresh(), [{ op: 'touch', ref: '$last' }]);
     expect(r3.results[0]).toMatchObject({ error: { code: 'invalid_reference' } });
+    // The message says when "$last" starts over, and the hint says to use the id.
+    expect(r3.results[0]).toMatchObject({ error: { message: expect.stringContaining('undone, restored or loaded'), hint: expect.stringContaining('by its id') } });
   });
 
   it('suffixes taken ids with a warning and generates ids when none is given', () => {

@@ -1,8 +1,9 @@
 import { Resvg } from '@resvg/resvg-js';
 import { EngineError } from '../errors.ts';
+import { unionBoxes } from '../geometry/bezier.ts';
 import type { Box } from '../geometry/types.ts';
-import type { Doc } from '../scene/model.ts';
-import { worldBounds } from '../scene/query.ts';
+import type { Doc, SceneNode } from '../scene/model.ts';
+import { clipBounds, worldBounds, worldContentBounds } from '../scene/query.ts';
 import { toSvg } from './svg.ts';
 
 export type Overlay = 'ids' | 'bounds' | 'grid';
@@ -62,20 +63,104 @@ export function rasterize(doc: Doc, options: RasterOptions = {}): Raster {
       'Lower scale, or render a smaller region and zoom into the part you need.',
     );
   }
-  const body = toSvg(doc);
+  // The area to draw can be wider than the region (see planRender); the render is cropped back to the region.
+  const k = Math.min(width / region.width, height / region.height);
+  const plan = planRender(doc, region, k, maxPixels);
+  const body = toSvg(plan.doc);
   const inner = body.slice(body.indexOf('>') + 1, body.lastIndexOf('</svg>'));
   const overlay = overlaySvg(doc, region, scale, options.overlays ?? [], options.grid);
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
-    `viewBox="${region.x} ${region.y} ${region.width} ${region.height}">${inner}${overlay}</svg>`;
+  const pad = [region.x - plan.area.x, plan.area.x + plan.area.width - region.x - region.width, region.y - plan.area.y, plan.area.y + plan.area.height - region.y - region.height].map((d) => Math.ceil(d * k));
+  const [left, right, top, bottom] = pad as [number, number, number, number];
+  const [w2, h2] = [width + left + right, height + top + bottom];
+  const view = pad.every((p) => p === 0)
+    ? `${region.x} ${region.y} ${region.width} ${region.height}`
+    : [region.x - ((width - region.width * k) / 2 + left) / k, region.y - ((height - region.height * k) / 2 + top) / k, w2 / k, h2 / k].join(' ');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w2}" height="${h2}" viewBox="${view}">${inner}${overlay}</svg>`;
   const fonts = options.fonts;
   const image = new Resvg(svg, {
     background: options.background ?? 'white',
     font: fonts
       ? { fontFiles: [...fonts.files], loadSystemFonts: false, defaultFontFamily: fonts.defaultFamily }
       : { loadSystemFonts: true },
+    ...(w2 === width && h2 === height ? {} : { crop: { left, top, right: left + width, bottom: top + height } }),
   }).render();
   return { width: image.width, height: image.height, png: image.asPng(), pixels: image.pixels };
+}
+
+/** Whether resvg draws this node in a layer of its own: it has an opacity, filter, mask, clip or blend mode. */
+const hasLayer = (n: SceneNode): boolean =>
+  n.style.filter !== undefined || n.mask !== undefined || n.clip !== undefined || (n.style.opacity ?? 1) < 1 || (n.style.blend ?? 'normal') !== 'normal';
+
+/**
+ * resvg aborts the whole process on a layer that lies wholly outside four times the pixmap, and it
+ * measures a layer inside another one from the outer layer's corner. So a render is planned first:
+ * - A layered node that cannot reach the crop is left out; what it draws would not show anyway.
+ * - A layered node that holds other layered nodes is drawn whole, so the area grows to fit it. When
+ *   that would pass `maxPixels`, the node loses its layer (its opacity, filter, mask, clip and
+ *   blend) instead, which is the lesser harm.
+ * Nodes inside a layered node are never left out: their layer's box depends on them.
+ *
+ * A node's layer box is what resvg measures: its geometry grown by the stroke, the union of its
+ * children's layer boxes, or, with a filter, its geometry grown by one box size on each side (the
+ * filter region of render/defs-svg.ts). A clip does not shrink it, but it limits what shows.
+ */
+function planRender(doc: Doc, region: Box, pixelsPerUnit: number, maxPixels: number): { readonly doc: Doc; readonly area: Box } {
+  const strokeWidth = (n: SceneNode): number => n.style.strokeWidth ?? (n.parent === null ? 1 : strokeWidth(doc.nodes[n.parent]!));
+  const grow = (b: Box, dx: number, dy: number): Box => ({ x: b.x - dx, y: b.y - dy, width: b.width + 2 * dx, height: b.height + 2 * dy });
+  const meet = (p: Box, q: Box): Box | null => {
+    const [x0, y0] = [Math.max(p.x, q.x), Math.max(p.y, q.y)];
+    const [x1, y1] = [Math.min(p.x + p.width, q.x + q.width), Math.min(p.y + p.height, q.y + q.height)];
+    return x1 >= x0 && y1 >= y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null;
+  };
+  const memo = <T,>(f: (n: SceneNode) => T) => {
+    const done = new Map<string, T>();
+    return (n: SceneNode): T => (done.has(n.id) ? done.get(n.id)! : (done.set(n.id, f(n)), done.get(n.id)!));
+  };
+  const geometry: (n: SceneNode) => Box | null = memo((n) => (n.type === 'group' ? unionBoxes(n.children.flatMap((id) => geometry(doc.nodes[id]!) ?? [])) : worldContentBounds(doc, n.id)));
+  const layer: (n: SceneNode) => Box | null = memo((n) => {
+    const b = geometry(n);
+    if (n.style.filter !== undefined) return b && grow(b, b.width, b.height);
+    if (n.type === 'group') return unionBoxes(n.children.flatMap((id) => layer(doc.nodes[id]!) ?? []));
+    return b && grow(b, 0.75 * strokeWidth(n), 0.75 * strokeWidth(n));
+  });
+  const below = (n: SceneNode): boolean => n.type === 'group' && n.children.some((id) => hasLayer(doc.nodes[id]!) || below(doc.nodes[id]!));
+  // One pixel of slack for anti-aliasing.
+  const seen = (b: Box | null) => b !== null && b.x - 1 < region.x + region.width && b.x + b.width + 1 > region.x && b.y - 1 < region.y + region.height && b.y + b.height + 1 > region.y;
+  const gone = new Set<string>();
+  const flat = new Set<string>();
+  let area = region;
+  const visit = (ids: readonly string[]): void => {
+    for (const id of ids) {
+      const node = doc.nodes[id]!;
+      if (!hasLayer(node)) {
+        if (node.type === 'group') visit(node.children);
+        continue;
+      }
+      const box = layer(node);
+      const clip = box && node.clip ? clipBounds(doc, node) : undefined;
+      if (!seen(clip === undefined ? box : clip && box && meet(box, clip))) {
+        gone.add(id);
+      } else if (below(node)) {
+        const wider = unionBoxes([area, box!])!;
+        if (wider.width * wider.height * pixelsPerUnit ** 2 <= maxPixels) area = wider;
+        else {
+          flat.add(id);
+          if (node.type === 'group') visit(node.children);
+        }
+      }
+    }
+  };
+  visit(doc.root);
+  if (gone.size === 0 && flat.size === 0) return { doc, area };
+  const keep = (ids: readonly string[]) => ids.filter((id) => !gone.has(id));
+  const nodes = { ...doc.nodes };
+  for (const id of flat) nodes[id] = { ...nodes[id]!, style: { ...nodes[id]!.style, filter: undefined, opacity: undefined, blend: undefined }, mask: undefined, clip: undefined };
+  for (const id of gone) {
+    const parent = nodes[id]!.parent;
+    const group = parent === null ? undefined : nodes[parent];
+    if (group?.type === 'group') nodes[group.id] = { ...group, children: keep(group.children) };
+  }
+  return { doc: { ...doc, nodes, root: keep(doc.root) }, area };
 }
 
 /** The smallest round step (1, 2 or 5 × 10^k) that is at least `min`. */

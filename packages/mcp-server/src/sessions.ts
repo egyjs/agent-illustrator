@@ -10,9 +10,12 @@ export type Session = {
   renders: number;
 };
 
+/** A new session, and the ids of the documents that were closed to make room for it. */
+export type Created = { readonly session: Session; readonly closed: readonly string[] };
+
 /** Where documents live between tool calls (FR-12.3); a Redis store can implement this later. */
 export interface SessionStore {
-  create(doc: Doc): Session;
+  create(doc: Doc): Created;
   get(id: string): Session;
   size(): number;
 }
@@ -35,11 +38,13 @@ export class MemorySessionStore implements SessionStore {
     this.#onClose = onClose;
   }
 
-  create(doc: Doc): Session {
+  create(doc: Doc): Created {
+    const closed: string[] = [];
     while (this.#sessions.size >= this.#max) {
       const oldest = this.#sessions.keys().next().value!;
       this.#sessions.delete(oldest);
       this.#closed.add(oldest);
+      closed.push(oldest);
       if (this.#closed.size > REMEMBER_CLOSED) this.#closed.delete(this.#closed.values().next().value!);
       this.#onClose(oldest);
     }
@@ -48,7 +53,7 @@ export class MemorySessionStore implements SessionStore {
     while (this.#sessions.has(id) || this.#closed.has(id));
     const session: Session = { id, store: new DocumentStore(doc), lastCreated: undefined, renders: 0 };
     this.#sessions.set(id, session);
-    return session;
+    return { session, closed };
   }
 
   get(id: string): Session {

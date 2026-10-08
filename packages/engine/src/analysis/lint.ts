@@ -1,4 +1,4 @@
-import { formatHex, oklch, parse, toGamut, wcagLuminance } from 'culori';
+import { formatHex, oklch, parse, rgb, toGamut, wcagLuminance } from 'culori';
 import RBush from 'rbush';
 import { booleanOp, type Shape } from '../geometry/boolean.ts';
 import { signedArea } from '../geometry/flatten.ts';
@@ -45,11 +45,20 @@ export type LintOptions = {
 export type LintResult = { readonly issues: LintIssue[]; readonly truncated: boolean; readonly checked: LintCheck[] };
 
 const EPS = 1e-6;
-/** Edge values this close count as aligned. */
-const ALIGNED = 0.01;
+/** Edge values this close (px) count as aligned. */
+const ALIGNED = 0.5;
+/** Two boxes are compared for near misses only when they are within this share of the canvas's shorter side of each other. */
+const NEAR_SHARE = 0.1;
+const MAX_NEAR_MISSES = 10;
 const MAX_SIBLINGS = 300;
 const MAX_OVERLAP_PAIRS = 200;
 const MAX_CONTRAST_TEXTS = 50;
+/** The contrast check gives up after this long, in total. */
+const CONTRAST_BUDGET_MS = 2000;
+/** A backdrop pixel counts when it is at least this opaque (of 255). */
+const OPAQUE = 128;
+/** With no canvas background, texts over less opaque backdrop than this share are skipped: there is nothing to measure against. */
+const MIN_BACKDROP = 0.1;
 /** Contrast samples render at most this many pixels; larger boxes render scaled down. */
 const MAX_SAMPLE_PIXELS = 250_000;
 /** A partly off-canvas shape this big is a background or a bleed, not a slip. */
@@ -71,6 +80,9 @@ type Scope = {
 type Leaf = PathNode | TextNode;
 const leaves = (s: Scope): Leaf[] => s.order.filter((n): n is Leaf => n.type !== 'group' && s.inScope(n.id));
 
+/** Issue codes from the most to the least important; within a severity, issues come in this order. */
+const CODE_ORDER: readonly string[] = ['off_canvas', 'degenerate', 'no_ink', 'text_overlap', 'low_contrast', 'near_miss', 'partly_off_canvas', 'tiny', 'overlap', 'empty_group'];
+
 const round2 = (v: number) => Math.round(v * 100) / 100;
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -82,7 +94,8 @@ const deleteFix = (id: string) => ({ op: 'delete', ids: [id] });
 /**
  * Checks a scene for the mistakes agents make (FR-10): shapes off the canvas, collapsed or tiny
  * shapes, almost-aligned siblings, colliding text and unreadable text. Warnings come first, then
- * infos, each sorted by code and ids, so equal scenes give equal output.
+ * infos, each in the order of CODE_ORDER and then by ids, so equal scenes give equal output and a
+ * cut at maxIssues drops the least important issues.
  */
 export function lint(doc: Doc, options: LintOptions = {}): LintResult {
   const { tolerance = 2, tinySize = 2, maxIssues = 50 } = options;
@@ -108,7 +121,8 @@ export function lint(doc: Doc, options: LintOptions = {}): LintResult {
   };
   const found = checked.flatMap((c) => CHECKS[c](scope));
   const rank = (i: LintIssue) => (i.severity === 'warning' ? 0 : 1);
-  found.sort((a, b) => rank(a) - rank(b) || cmp(a.code, b.code) || cmp(a.ids.join(','), b.ids.join(',')));
+  const priority = (i: LintIssue) => CODE_ORDER.indexOf(i.code);
+  found.sort((a, b) => rank(a) - rank(b) || priority(a) - priority(b) || cmp(a.ids.join(','), b.ids.join(',')));
   return { issues: found.slice(0, maxIssues), truncated: partial || found.length > maxIssues, checked };
 }
 
@@ -202,30 +216,53 @@ const AXES: readonly (readonly Edge[])[] = [['left', 'right', 'center-x'], ['top
 const edgeValue = (b: Box, e: Edge): number =>
   e === 'left' ? b.x : e === 'right' ? b.x + b.width : e === 'top' ? b.y : e === 'bottom' ? b.y + b.height : e === 'center-x' ? b.x + b.width / 2 : b.y + b.height / 2;
 
-/** The edge on which two boxes miss each other by the least, within tolerance; null when they line up or are far apart. */
-function closestMiss(a: Box, b: Box, tolerance: number): { edge: Edge; gap: number } | null {
+/**
+ * The edge on which two boxes miss each other by the least, within tolerance; null when they line
+ * up or are far apart. An edge on or past the canvas edge never counts: shapes that bleed off the
+ * canvas differ there on purpose.
+ */
+function closestMiss(a: Box, b: Box, tolerance: number, canvas: Doc['canvas']): { edge: Edge; gap: number } | null {
   let best: { edge: Edge; gap: number } | null = null;
-  for (const axis of AXES) {
-    const gaps = axis.map((edge) => ({ edge, gap: Math.abs(edgeValue(a, edge) - edgeValue(b, edge)) }));
+  for (const [k, axis] of AXES.entries()) {
+    const size = k === 0 ? canvas.width : canvas.height;
+    const gaps = axis.map((edge) => {
+      const [p, q] = [edgeValue(a, edge), edgeValue(b, edge)];
+      return { edge, gap: Math.abs(p - q), bleed: p <= 0 || p >= size || q <= 0 || q >= size };
+    });
     if (gaps.some((g) => g.gap <= ALIGNED)) continue;
-    for (const g of gaps) if (g.gap <= tolerance && (!best || g.gap < best.gap)) best = g;
+    for (const g of gaps) if (!g.bleed && g.gap <= tolerance && (!best || g.gap < best.gap)) best = g;
   }
   return best;
 }
 
+/** The larger of the horizontal and vertical gaps between two boxes; 0 when they touch or overlap. */
+const apart = (a: Box, b: Box): number =>
+  Math.max(0, Math.max(a.x, b.x) - Math.min(a.x + a.width, b.x + b.width), Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height));
+
 function nearMiss(s: Scope): LintIssue[] {
+  const { width, height } = s.doc.canvas;
+  const reach = NEAR_SHARE * Math.min(width, height);
   const out: LintIssue[] = [];
   const lists = [s.doc.root, ...s.order.flatMap((n) => (n.type === 'group' ? [n.children] : []))];
   for (const list of lists) {
-    const items = list.flatMap((id) => {
+    const boxed = list.flatMap((id) => {
       const box = s.box(id);
       return box ? [{ id, box }] : [];
-    }).slice(0, MAX_SIBLINGS);
+    });
+    // Siblings out of scope matter only as neighbours of one in scope.
+    const mine = boxed.filter((it) => s.inScope(it.id));
+    const near = mine.length === boxed.length ? boxed : boxed.filter((it) => s.inScope(it.id) || mine.some((m) => apart(m.box, it.box) <= reach));
+    if (near.length > MAX_SIBLINGS) s.cut();
+    const items = near.slice(0, MAX_SIBLINGS);
     for (const [i, a] of items.entries()) {
       for (const b of items.slice(i + 1)) {
-        if (!s.inScope(a.id) && !s.inScope(b.id)) continue;
-        const miss = closestMiss(a.box, b.box, s.tolerance);
+        if ((!s.inScope(a.id) && !s.inScope(b.id)) || apart(a.box, b.box) > reach) continue;
+        const miss = closestMiss(a.box, b.box, s.tolerance, s.doc.canvas);
         if (!miss) continue;
+        if (out.length === MAX_NEAR_MISSES) {
+          s.cut();
+          return out;
+        }
         out.push(
           issue(
             'near_miss',
@@ -244,26 +281,41 @@ function nearMiss(s: Scope): LintIssue[] {
 
 const indexed = (id: string, b: Box): Indexed => ({ id, minX: b.x, minY: b.y, maxX: b.x + b.width, maxY: b.y + b.height });
 
-/** Pairs of items whose boxes share positive area, each pair once, in the items' order (R-tree candidates). */
-function overlappingPairs(items: readonly Indexed[]): [Indexed, Indexed][] {
+/** The first `limit` pairs of items whose boxes share positive area that `wanted` accepts, each pair once, in the items' order (R-tree candidates). */
+function overlappingPairs(items: readonly Indexed[], limit: number, wanted: (a: Indexed, b: Indexed) => boolean): [Indexed, Indexed][] {
   const tree = new RBush<Indexed>().load(items);
   const rank = new Map(items.map((it, i) => [it.id, i]));
-  return items.flatMap((a) =>
-    tree
+  const out: [Indexed, Indexed][] = [];
+  for (const a of items) {
+    const hits = tree
       .search(a)
       .filter((b) => rank.get(b.id)! > rank.get(a.id)! && Math.min(a.maxX, b.maxX) > Math.max(a.minX, b.minX) && Math.min(a.maxY, b.maxY) > Math.max(a.minY, b.minY))
-      .sort((p, q) => rank.get(p.id)! - rank.get(q.id)!)
-      .map((b): [Indexed, Indexed] => [a, b]),
-  );
+      .sort((p, q) => rank.get(p.id)! - rank.get(q.id)!);
+    for (const b of hits) {
+      if (!wanted(a, b)) continue;
+      out.push([a, b]);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
 }
 
-/** Pairs of in-scope nodes of one type with overlapping boxes, with at least one of the pair in scope. */
+/**
+ * Pairs of nodes of one type with overlapping boxes, with at least one of the pair in scope. At most
+ * MAX_OVERLAP_PAIRS come back, and the check is marked cut when there were more, so a pile of
+ * stacked nodes costs bounded time and memory.
+ */
 function candidates(s: Scope, type: Leaf['type']): [Indexed, Indexed][] {
   const items = s.order.flatMap((n) => {
     const box = n.type === type ? s.box(n.id) : null;
     return box ? [indexed(n.id, box)] : [];
   });
-  return overlappingPairs(items).filter(([a, b]) => s.inScope(a.id) || s.inScope(b.id));
+  const pairs = overlappingPairs(items, MAX_OVERLAP_PAIRS + 1, (a, b) => s.inScope(a.id) || s.inScope(b.id));
+  if (pairs.length > MAX_OVERLAP_PAIRS) {
+    s.cut();
+    pairs.pop();
+  }
+  return pairs;
 }
 
 function textOverlap(s: Scope): LintIssue[] {
@@ -281,14 +333,12 @@ function textOverlap(s: Scope): LintIssue[] {
 }
 
 function overlap(s: Scope): LintIssue[] {
-  const pairs = candidates(s, 'path');
-  if (pairs.length > MAX_OVERLAP_PAIRS) s.cut();
   const out: LintIssue[] = [];
   const shapeOf = (id: string): Shape => {
     const node = s.doc.nodes[id] as PathNode;
     return { subpaths: worldSubpaths(s.doc, node), fillRule: node.fillRule };
   };
-  for (const [a, b] of pairs.slice(0, MAX_OVERLAP_PAIRS)) {
+  for (const [a, b] of candidates(s, 'path')) {
     const [sa, sb] = [shapeOf(a.id), shapeOf(b.id)];
     const smaller = Math.min(Math.abs(signedArea(sa.subpaths)), Math.abs(signedArea(sb.subpaths)));
     // A line or an empty path has no fill to overlap.
@@ -337,15 +387,24 @@ function without(doc: Doc, node: SceneNode): Doc {
 
 const hex = (rgb: number) => `#${rgb.toString(16).padStart(6, '0')}`;
 
-/** The pixels at the 5th and 95th percentile of WCAG luminance in an RGBA buffer, as '#rrggbb'. */
-function luminanceEnds(pixels: Uint8Array): [low: string, high: string] {
+/**
+ * What lies behind a text, from the premultiplied RGBA pixels of a render on a transparent
+ * backdrop: the share of pixels that are opaque (at least OPAQUE of 255), and among those the colors
+ * at the 5th and 95th percentile of WCAG luminance, as '#rrggbb'. Null when no pixel is opaque.
+ */
+function backdrop(pixels: Uint8Array): { share: number; ends: [low: string, high: string] } | null {
   const counts = new Map<number, number>();
+  let opaque = 0;
   for (let i = 0; i + 3 < pixels.length; i += 4) {
-    const rgb = (pixels[i]! << 16) | (pixels[i + 1]! << 8) | pixels[i + 2]!;
+    const alpha = pixels[i + 3]!;
+    if (alpha < OPAQUE) continue;
+    const straight = (c: number) => Math.min(255, Math.round((c * 255) / alpha));
+    const rgb = (straight(pixels[i]!) << 16) | (straight(pixels[i + 1]!) << 8) | straight(pixels[i + 2]!);
     counts.set(rgb, (counts.get(rgb) ?? 0) + 1);
+    opaque++;
   }
+  if (opaque === 0) return null;
   const ranked = [...counts].map(([rgb, n]) => ({ rgb, n, lum: wcagLuminance(hex(rgb)) })).sort((a, b) => a.lum - b.lum || a.rgb - b.rgb);
-  const total = pixels.length / 4;
   const at = (rank: number): string => {
     let seen = 0;
     for (const c of ranked) {
@@ -354,18 +413,29 @@ function luminanceEnds(pixels: Uint8Array): [low: string, high: string] {
     }
     return hex(ranked.at(-1)!.rgb);
   };
-  return [at(Math.floor(0.05 * total)), at(Math.min(total - 1, Math.floor(0.95 * total)))];
+  return { share: opaque / (pixels.length / 4), ends: [at(Math.floor(0.05 * opaque)), at(Math.min(opaque - 1, Math.floor(0.95 * opaque)))] };
 }
 
 const ratio = (a: string, b: string) => contrastRatio(a, b) ?? 1;
 const intoSrgb = toGamut('rgb', 'oklch');
 
+/** `color` drawn at this opacity over `back`, as '#rrggbb'. */
+function over(color: string, opacity: number, back: string): string {
+  const [f, b] = [rgb(parse(color)!), rgb(parse(back)!)];
+  const mix = (p: number, q: number) => p * opacity + q * (1 - opacity);
+  return formatHex({ mode: 'rgb', r: mix(f.r, b.r), g: mix(f.g, b.g), b: mix(f.b, b.b) });
+}
+
+/** The contrast of text in `color` at this opacity against the worst of these backdrops. */
+const worstRatio = (color: string, opacity: number, backs: readonly string[]): number => Math.min(...backs.map((bg) => ratio(over(color, opacity, bg), bg)));
+
 /**
- * A text color that reads on these backdrops: the text color with its OKLCH lightness moved in 0.05
- * steps away from the hardest backdrop until `need` holds on all of them; else black or white.
+ * A text color that reads on these backdrops at this opacity: the text color with its OKLCH
+ * lightness moved in 0.05 steps away from the hardest backdrop until `need` holds on all of them;
+ * else black or white, whichever is better. The result may still fall short, for faint text.
  */
-function readableFill(fg: string, backs: readonly string[], need: number): string {
-  const worst = (color: string) => Math.min(...backs.map((bg) => ratio(color, bg)));
+function readableFill(fg: string, opacity: number, backs: readonly string[], need: number): string {
+  const worst = (color: string) => worstRatio(color, opacity, backs);
   const hardest = backs.reduce((a, b) => (ratio(fg, b) < ratio(fg, a) ? b : a));
   const step = wcagLuminance(fg) >= wcagLuminance(hardest) ? 0.05 : -0.05;
   const lch = oklch(parse(fg)!);
@@ -376,6 +446,26 @@ function readableFill(fg: string, backs: readonly string[], need: number): strin
     if (worst(next) >= need) return next;
   }
   return worst('#000000') >= worst('#ffffff') ? '#000000' : '#ffffff';
+}
+
+/** How opaque a text draws, apart from its color's own alpha: its opacity and its ancestors', and the nearest fill-opacity. */
+function textOpacity(doc: Doc, node: TextNode): number {
+  let opacity = 1;
+  let fillSet = false;
+  for (let at: SceneNode | undefined = node; at; at = at.parent === null ? undefined : getNode(doc, at.parent)) {
+    opacity *= at.style.opacity ?? 1;
+    if (!fillSet && at.style.fillOpacity !== undefined) {
+      opacity *= at.style.fillOpacity;
+      fillSet = true;
+    }
+  }
+  return opacity;
+}
+
+/** Whether the canvas has a background that paints. */
+function painted({ background }: Doc['canvas'], doc: Doc): boolean {
+  const color = background === undefined ? undefined : resolvePaint(doc, background);
+  return color !== undefined && color !== 'none';
 }
 
 /** A text node to check: its solid color and the part of the canvas around it. */
@@ -389,27 +479,47 @@ function contrast(s: Scope): LintIssue[] {
     return node.type === 'text' && fg !== undefined && region ? [{ node, fg, region }] : [];
   });
   if (samples.length > MAX_CONTRAST_TEXTS) s.cut();
-  return samples.slice(0, MAX_CONTRAST_TEXTS).flatMap((sample) => lowContrast(s, sample) ?? []);
+  const started = performance.now();
+  const out: LintIssue[] = [];
+  for (const sample of samples.slice(0, MAX_CONTRAST_TEXTS)) {
+    if (performance.now() - started > CONTRAST_BUDGET_MS) {
+      s.cut();
+      break;
+    }
+    const found = lowContrast(s, sample);
+    if (found) out.push(found);
+  }
+  return out;
 }
 
-/** WCAG 1.4.3: the text color against the 5th and 95th percentile pixels of what lies behind the text. */
+/**
+ * WCAG 1.4.3: the text color, as it shows at its opacity, against the 5th and 95th percentile
+ * pixels of what lies behind the text. Only opaque backdrop counts: with no canvas background, a
+ * text over mostly empty canvas has nothing to be measured against and is skipped. The fix is
+ * offered only when it passes.
+ */
 function lowContrast(s: Scope, { node, fg, region }: Sample): LintIssue | null {
   const scale = Math.min(1, Math.sqrt(MAX_SAMPLE_PIXELS / (region.width * region.height)));
-  const backs = luminanceEnds(rasterize(without(s.doc, node), { region, scale, fonts: s.fonts }).pixels);
+  const back = backdrop(rasterize(without(s.doc, node), { region, scale, fonts: s.fonts, background: 'transparent' }).pixels);
+  if (back === null || (back.share < MIN_BACKDROP && !painted(s.doc.canvas, s.doc))) return null;
   const [a, b, c, d] = worldTransform(s.doc, node.id);
   // The size on the canvas, after any scaling by the node's groups.
   const size = node.font.size * Math.sqrt(Math.abs(a * d - b * c));
   const large = size >= 24 || (size >= 18.66 && node.font.weight >= 700);
   const need = large ? 3 : 4.5;
-  const got = Math.min(...backs.map((bg) => ratio(fg, bg)));
+  const opacity = textOpacity(s.doc, node);
+  const got = worstRatio(fg, opacity * (parse(fg)?.alpha ?? 1), back.ends);
   if (got >= need) return null;
-  const fill = readableFill(fg, backs, need);
+  const fill = readableFill(fg, opacity, back.ends, need);
+  const works = worstRatio(fill, opacity, back.ends) >= need;
   return issue(
     'low_contrast',
     'warning',
     [node.id],
     `text "${node.id}" has a contrast of ${Math.floor(got * 100) / 100}:1 against what lies behind it; ${need}:1 is needed${large ? ' for large text' : ''}`,
-    `Change its fill (the fix uses ${fill}), or put a lighter or darker shape behind it.`,
-    { op: 'style', ids: [node.id], style: { fill } },
+    works
+      ? `Change its fill (the fix uses ${fill}), or put a lighter or darker shape behind it.`
+      : 'Change its fill, raise its opacity, or put a lighter or darker shape behind it. No fill color alone is enough at its current opacity.',
+    works ? { op: 'style', ids: [node.id], style: { fill } } : undefined,
   );
 }

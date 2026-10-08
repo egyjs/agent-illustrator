@@ -106,6 +106,26 @@ describe('OpenAICompatibleModel', () => {
     expect(requests[0]!.body).not.toHaveProperty('tools');
   });
 
+  it('keeps the API key and key-shaped tokens out of the error it reports', async () => {
+    const key = 'sk-or-v1-abcdef0123456789';
+    const body = `{"error":"invalid key ${key}","note":"also sk-live_ZZZZ9999 and sk-ab"}`;
+    const { fetchFn } = responder(new Response(body, { status: 401 }));
+    const model = new OpenAICompatibleModel({ model: 'm', apiKey: key, baseUrl: 'http://endpoint.test/v1/', backoffMs: 1, fetch: fetchFn });
+    const failure = await model.chat([{ role: 'user', content: 'x' }], []).then(
+      () => '',
+      (e: unknown) => (e as Error).message,
+    );
+    expect(failure).toMatch(/HTTP 401/);
+    expect(failure).not.toContain('abcdef0123456789');
+    expect(failure).not.toContain('ZZZZ9999');
+    expect(failure).toContain('sk-[redacted]');
+    expect(failure).toContain('sk-ab');
+    // A key cut by the 300-character limit would leak its start, so the redaction comes first.
+    const padded = responder(new Response(`${'x'.repeat(290)}${key}`, { status: 400 }));
+    const cut = await new OpenAICompatibleModel({ model: 'm', apiKey: key, baseUrl: 'http://endpoint.test/v1/', fetch: padded.fetchFn }).chat([{ role: 'user', content: 'x' }], []).catch((e: unknown) => (e as Error).message);
+    expect(cut).not.toContain('sk-or-v1');
+  });
+
   it('gives up after the retries and rejects an unexpected payload', async () => {
     const { requests, fetchFn } = responder(...Array.from({ length: 4 }, () => Response.json({ choices: [] })));
     await expect(make(fetchFn).chat([{ role: 'user', content: 'x' }], [])).rejects.toThrow(/unexpected response shape/);
@@ -229,7 +249,7 @@ describe.skipIf(!existsSync(PATHS.serverCli))('against the built server', () => 
   it('runs both modes on one model, and a brief without a document leaves no tools files', async () => {
     const outDir = join(tmp, 'both-run');
     const result = await runBrief(new ScriptedModel([say('Nothing to draw.'), say(SQUARE)]), brief, { outDir, mode: 'both', maxTurns: 5 });
-    expect(result.tools).toMatchObject({ finished: true, turns: 1, toolCalls: 0 });
+    expect(result.tools).toMatchObject({ finished: false, turns: 1, toolCalls: 0, error: 'no document created' });
     expect(result.raw).toMatchObject({ finished: true, turns: 1, toolCalls: 0 });
     expect(existsSync(join(outDir, 'tools.svg'))).toBe(false);
     expect(readFileSync(join(outDir, 'raw.svg'), 'utf8')).toBe(SQUARE);

@@ -64,6 +64,21 @@ describe('scene/model: validateDocument', () => {
     expectCode(() => validateDocument(doc), 'invalid_document');
   });
 
+  it('cuts the values it echoes to 40 characters', () => {
+    const long = 'x'.repeat(5000);
+    const message = (doc: unknown) => expectCode(() => validateDocument(doc), 'invalid_document').message;
+    for (const doc of [
+      { ...valid, tokens: { [long]: long } },
+      { ...valid, tokens: { brand: long } },
+      { ...valid, canvas: { width: 800, height: 600, background: long } },
+      { ...valid, root: ['g', long] },
+    ]) {
+      const text = message(JSON.parse(JSON.stringify(doc)));
+      expect(text.length).toBeLessThan(400);
+    }
+    expect(message({ ...valid, tokens: { brand: long } })).toContain(`${'x'.repeat(40)}…`);
+  });
+
   it('applies the text ops\' content rules to text nodes', () => {
     const withText = (content: string) =>
       docOf([

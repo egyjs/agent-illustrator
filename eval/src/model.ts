@@ -56,6 +56,12 @@ const wire = (m: ChatMessage) => (m.role === 'assistant' ? { role: m.role, conte
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 export const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/** Keys shorter than this are placeholders (a local server takes any value), so they are not hunted for in text. */
+const MIN_SECRET = 8;
+/** `text` without the API key and without anything shaped like a secret key ("sk-…"), for error bodies that end up in transcripts and reports. */
+export const redact = (text: string, apiKey: string): string =>
+  (apiKey.length >= MIN_SECRET ? text.split(apiKey).join('[redacted]') : text).replace(/sk-[A-Za-z0-9_-]{6,}/g, 'sk-[redacted]');
+
 export type OpenAIOptions = {
   model: string;
   /** Default env `EVAL_BASE_URL`, else OpenRouter. */
@@ -105,10 +111,10 @@ export class OpenAICompatibleModel implements ChatModel {
         });
         const payload = await res.text();
         if (res.ok) return parseReply(payload);
-        failure = `HTTP ${res.status}: ${payload.slice(0, 300)}`;
+        failure = `HTTP ${res.status}: ${redact(payload, this.apiKey).slice(0, 300)}`;
         if (res.status !== 429 && res.status < 500) break;
       } catch (e) {
-        failure = errorText(e);
+        failure = redact(errorText(e), this.apiKey);
       }
     }
     throw new Error(`model request to ${this.url} failed: ${failure}`);

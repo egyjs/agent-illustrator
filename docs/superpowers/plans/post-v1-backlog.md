@@ -12,6 +12,8 @@ Collected 2026-10-08 so post-v1 work starts from one list. Product features stay
 7. **RTL anchoring is physical.** `anchor: 'end'` puts the right edge of Arabic text at `x`; logical (direction-aware) anchoring is not implemented.
 8. **Gradients, filters and masks on flat shapes render nothing** (bounding-box units need area). Ops warn `zero_extent`; a stroke-only gradient on a line needs `userSpaceOnUse`.
 9. **Text-to-outlines, HarfBuzz shaping, paragraph wrapping** are out of v1 (PROJECT_INIT §4.3). Text cannot join booleans or act as a clip shape.
+10. **The undo stack has no byte budget.** `DocumentStore` keeps the last 50 versions (`MAX_UNDO`) and up to `MAX_CHECKPOINTS` checkpoints by count only. Versions share unchanged nodes, but a session of large documents with sweeping edits can hold much more memory than the 50-document cap suggests. Fix: estimate each version's size when it is committed and drop the oldest versions past a byte budget (a `maxUndoBytes` limit next to `maxNodes`). (`scene/store.ts`)
+11. **Region renders past the pixel budget lose layers.** `rasterize` draws a layer whole when it holds other layers (resvg misplaces nested layers, and aborts on one far outside a small render). When the area that takes passes `maxPixels`, the outer node's opacity, filter, mask, clip and blend are dropped for that render. A bigger budget or tiled rendering would keep them. (`render/raster.ts`)
 
 ## Deferred minors still open (M1–M4)
 Full lists with context: the "Deferred minors" sections of the M1–M4 plans in this folder.

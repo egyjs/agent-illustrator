@@ -59,8 +59,18 @@ export function worldBounds(doc: Doc, id: string): Box | null {
   const node = requireNode(doc, id);
   const box = unclippedBounds(doc, node);
   if (!box || !node.clip) return box;
-  const clipBox = pathBounds(applyToSubpaths(worldTransform(doc, id), node.clip.subpaths));
+  const clipBox = clipBounds(doc, node);
   return clipBox ? intersectBoxes(box, clipBox) : null;
+}
+
+/** `worldBounds` without the node's own clip: the area its content covers before it is clipped. */
+export function worldContentBounds(doc: Doc, id: string): Box | null {
+  return unclippedBounds(doc, requireNode(doc, id));
+}
+
+/** The world-space bounds of a node's clip shape; null when the node has no clip or the clip is empty. */
+export function clipBounds(doc: Doc, node: SceneNode): Box | null {
+  return node.clip ? pathBounds(applyToSubpaths(worldTransform(doc, node.id), node.clip.subpaths)) : null;
 }
 
 function unclippedBounds(doc: Doc, node: SceneNode): Box | null {

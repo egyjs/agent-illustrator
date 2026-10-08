@@ -4,7 +4,11 @@ import { markdownTitle, yamlScalar, type AgentKit } from './agent-kit.ts';
 import { guarded, opSignature, parse, text, type ToolDeps, type ToolResult } from './tools.ts';
 
 export const guideInput = z.object({
-  topic: z.string().optional().describe('What to read: "workflow", a guide name, "ops", "op:<name>", "presets", "preset:<name>" or "text-only"; omit for the index'),
+  topic: z
+    .string()
+    .max(200)
+    .optional()
+    .describe('What to read: "workflow", a guide name, "ops", "op:<name>", "presets", "preset:<name>" or "text-only"; omit for the index'),
 });
 
 export const illustrateArgs = z.object({

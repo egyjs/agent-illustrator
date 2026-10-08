@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CHECKS, INCREMENTAL_CHECKS, LINT_CHECKS, lint, type LintCheck, type LintIssue, type LintOptions, type LintResult } from '../../src/analysis/lint.ts';
 import { polyline } from '../../src/geometry/paths.ts';
 import { IDENTITY } from '../../src/geometry/transform.ts';
@@ -21,7 +21,15 @@ function scene(ops: unknown[], background = '#ffffff'): Doc {
 }
 const rect = (id: string, x: number, y: number, width: number, height: number, fill = '#2a9d8f') => ({ op: 'rect', id, x, y, width, height, style: { fill } });
 const circle = (id: string, cx: number, cy: number, rx: number) => ({ op: 'ellipse', id, cx, cy, rx, style: { fill: '#e76f51' } });
+const box = (id: string, x: number, y: number, w: number, h: number) => pathNode(id, [polyline([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], true)]);
 const label = (id: string, x: number, y: number, fill: string, size = 20, extra: object = {}) => ({ op: 'text', id, content: 'Overlap', x, y, size, style: { fill }, ...extra });
+
+/** A 400×300 canvas with no background. */
+function bare(ops: unknown[]): Doc {
+  const r = executeBatch(registry, createDocument({ width: 400, height: 300 }), ops, { fonts: FONTS });
+  expect(r.ok).toBe(true);
+  return r.doc;
+}
 
 const check = (doc: Doc, checks: LintCheck[], options: LintOptions = {}): LintResult => lint(doc, { fonts: FONTS, ...options, checks });
 const codes = (r: LintResult) => r.issues.map((i) => `${i.code}:${i.ids.join('+')}`);
@@ -130,7 +138,7 @@ describe('analysis/lint', () => {
   });
 
   describe('near_miss', () => {
-    const pair = (bx: number, by = 200, bw = 50) => scene([rect('a', 100, 100, 50, 50), rect('b', bx, by, bw, 50)]);
+    const pair = (bx: number, by = 160, bw = 50) => scene([rect('a', 100, 100, 50, 50), rect('b', bx, by, bw, 50)]);
 
     it('reports siblings whose edges miss by a little and offers an align', () => {
       const doc = pair(101.5);
@@ -143,7 +151,7 @@ describe('analysis/lint', () => {
 
     it('picks the edge that misses by the least', () => {
       // left misses by 1.8, center-x by 1.75, right by 1.7.
-      expect(check(pair(101.8, 300, 49.9), ['near_miss']).issues[0]!.fix).toEqual({ op: 'align', ids: ['a', 'b'], edge: 'right' });
+      expect(check(pair(101.8, 160, 49.9), ['near_miss']).issues[0]!.fix).toEqual({ op: 'align', ids: ['a', 'b'], edge: 'right' });
     });
 
     it('leaves aligned pairs and far-apart pairs alone', () => {
@@ -153,13 +161,53 @@ describe('analysis/lint', () => {
     });
 
     it('does not flag a pair that is already aligned on an axis, however its other edges fall', () => {
-      expect(check(pair(100, 200, 51), ['near_miss']).issues).toEqual([]);
-      expect(check(pair(99.5, 200, 51), ['near_miss']).issues).toEqual([]); // centered on each other
+      expect(check(pair(100, 160, 51), ['near_miss']).issues).toEqual([]);
+      expect(check(pair(99.5, 160, 51), ['near_miss']).issues).toEqual([]); // centered on each other
     });
 
     it('compares only siblings', () => {
-      const doc = scene([rect('a', 100, 100, 50, 50), rect('b', 101.5, 200, 50, 50), rect('c', 300, 100, 50, 50), { op: 'group', id: 'ga', ids: ['a'] }, { op: 'group', id: 'gb', ids: ['b'] }]);
+      const doc = scene([rect('a', 100, 100, 50, 50), rect('b', 101.5, 160, 50, 50), rect('c', 300, 100, 50, 50), { op: 'group', id: 'ga', ids: ['a'] }, { op: 'group', id: 'gb', ids: ['b'] }]);
       expect(codes(check(doc, ['near_miss']))).toEqual(['near_miss:ga+gb']);
+    });
+
+    it('counts a difference of half a pixel as aligned', () => {
+      expect(check(pair(100.4), ['near_miss']).issues).toEqual([]);
+      expect(codes(check(pair(100.6), ['near_miss']))).toEqual(['near_miss:a+b']);
+    });
+
+    it('compares only boxes within a tenth of the shorter canvas side of each other', () => {
+      // The canvas is 400×300: 30 px. The boxes are 10 px apart, then 50 px.
+      expect(codes(check(pair(101.5, 160), ['near_miss']))).toEqual(['near_miss:a+b']);
+      expect(check(pair(101.5, 200), ['near_miss']).issues).toEqual([]);
+    });
+
+    it('ignores edges on or past the canvas edge: a sky and a ground that overshoot it', () => {
+      const bleeds = scene([rect('sky', 0, 0, 400, 300), rect('ground', 0, 200, 400, 101)]);
+      expect(check(bleeds, ['near_miss']).issues).toEqual([]);
+      // The same overshoot short of the edge is a near miss.
+      expect(codes(check(scene([rect('sky', 0, 0, 400, 250), rect('ground', 0, 200, 400, 51)]), ['near_miss']))).toEqual(['near_miss:sky+ground']);
+    });
+
+    it('reports at most ten near misses and says so', () => {
+      const wide = executeBatch(
+        registry,
+        createDocument({ width: 4000, height: 600, background: '#ffffff' }),
+        Array.from({ length: 12 }, (_, k) => [rect(`a${k}`, 300 * k, 100, 50, 50), rect(`b${k}`, 300 * k + 1.5, 160, 50, 50)]).flat(),
+      ).doc;
+      const r = check(wide, ['near_miss'], { maxIssues: 100 });
+      expect(r.issues).toHaveLength(10);
+      expect(r.truncated).toBe(true);
+      expect(check(wide, ['near_miss'], { maxIssues: 100, ids: ['a0'] }).truncated).toBe(false);
+    });
+
+    it('looks at the in-scope siblings and their neighbours first, whatever the number of siblings', () => {
+      const filler = Array.from({ length: 330 }, (_, k) => box(`f${k}`, 5 + (k % 30) * 3.7, 5 + Math.floor(k / 30) * 3.7, 2, 2));
+      const doc = docOf([box('twin', 200, 100, 50, 50), ...filler, box('last', 201.5, 160, 50, 50)]);
+      const scoped = check(doc, ['near_miss'], { ids: ['last'] });
+      expect(codes(scoped)).toEqual(['near_miss:twin+last']);
+      expect(scoped.truncated).toBe(false);
+      // Everything at once is more than the check compares, and it says so.
+      expect(check(doc, ['near_miss']).truncated).toBe(true);
     });
   });
 
@@ -169,6 +217,16 @@ describe('analysis/lint', () => {
       const r = check(doc, ['text_overlap']);
       expect(codes(r)).toEqual(['text_overlap:one+two']);
       expect(r.issues[0]!.severity).toBe('warning');
+    });
+
+    it('stops at 200 pairs among 600 stacked texts, quickly', () => {
+      const ink = { x: 10, y: 10, width: 80, height: 20 };
+      const doc = docOf(Array.from({ length: 600 }, (_, k) => textNode(`t${k}`, { ink })));
+      const t0 = performance.now();
+      const r = check(doc, ['text_overlap'], { maxIssues: 1000 });
+      expect(performance.now() - t0).toBeLessThan(1000);
+      expect(r.issues).toHaveLength(200);
+      expect(r.truncated).toBe(true);
     });
 
     it('leaves separate lines alone', () => {
@@ -192,6 +250,14 @@ describe('analysis/lint', () => {
 
     it('ignores overlaps under 1% of the smaller shape', () => {
       expect(check(scene([circle('a', 100, 100, 50), circle('b', 198, 100, 50)]), ['overlap']).issues).toEqual([]);
+    });
+
+    it('stops collecting pairs at 200 among many stacked shapes, quickly', () => {
+      const t0 = performance.now();
+      const r = check(docOf(Array.from({ length: 400 }, (_, k) => box(`r${k}`, 100 + (k % 7), 100, 50, 50))), ['overlap'], { maxIssues: 1000 });
+      expect(performance.now() - t0).toBeLessThan(5000);
+      expect(r.issues.length).toBeLessThanOrEqual(200);
+      expect(r.truncated).toBe(true);
     });
 
     it('stops at 200 candidate pairs and says so', () => {
@@ -252,10 +318,62 @@ describe('analysis/lint', () => {
       const doc = scene([panel, rect('halo', 40, 125, 200, 40, '#ffffff'), label('note', 50, 150, '#000000')]);
       expect(check(doc, ['contrast']).issues).toEqual([]);
     });
+
+    it('measures only opaque backdrop: a text over nothing is skipped, and beside a panel it is held to the panel', () => {
+      expect(check(bare([label('note', 50, 150, '#bbbbbb')]), ['contrast'])).toEqual({ issues: [], truncated: false, checked: ['contrast'] });
+      // Light text, mostly over a dark panel, partly over empty canvas: white paper behind it would fail it.
+      expect(check(bare([rect('panel', 0, 0, 100, 300, '#222222'), label('note', 50, 150, '#eeeeee')]), ['contrast']).issues).toEqual([]);
+      // A canvas background does count.
+      expect(codes(check(scene([label('note', 50, 150, '#bbbbbb')]), ['contrast']))).toEqual(['low_contrast:note']);
+    });
+
+    it('judges the color as it shows: through its opacity, and its fix must pass or is left out', () => {
+      const text = (id: string, style: object, y = 150) => ({ op: 'text', id, content: 'Overlap', x: 50, y, size: 20, style });
+      // Black at 20% is light gray on white: no color reaches 4.5:1 at that opacity.
+      const faint = check(scene([text('faint', { fill: '#000000', opacity: 0.2 })]), ['contrast']);
+      expect(codes(faint)).toEqual(['low_contrast:faint']);
+      expect(faint.issues[0]!.fix).toBeUndefined();
+      expect(faint.issues[0]!.hint).toContain('opacity');
+      // At 80% a darker fill does pass, and the fix says which.
+      const dim = scene([text('dim', { fill: '#888888', opacity: 0.8 })]);
+      const [issue] = check(dim, ['contrast']).issues;
+      expect(issue!.code).toBe('low_contrast');
+      expect(check(applied(dim, issue!), ['contrast']).issues).toEqual([]);
+      // Opacity from a group counts too, and so does the color's own alpha.
+      const grouped = scene([text('kid', { fill: '#000000' }), { op: 'group', id: 'g', ids: ['kid'] }, { op: 'style', ids: ['g'], style: { opacity: 0.2 } }]);
+      expect(codes(check(grouped, ['contrast']))).toEqual(['low_contrast:kid']);
+      expect(codes(check(scene([text('see', { fill: 'rgba(0,0,0,0.2)' })]), ['contrast']))).toEqual(['low_contrast:see']);
+    });
+
+    it('gives up after two seconds in total and says so', () => {
+      const doc = scene([panel, label('a', 50, 100, '#777777'), label('b', 50, 200, '#777777')]);
+      const now = vi.spyOn(performance, 'now');
+      now.mockReturnValueOnce(0).mockReturnValue(10_000);
+      try {
+        const r = check(doc, ['contrast']);
+        expect(r.issues).toEqual([]);
+        expect(r.truncated).toBe(true);
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it('samples texts beside shapes with filters, masks and opacity that lie far from them', () => {
+      const doc = scene([
+        rect('card', 10, 10, 40, 30),
+        { op: 'filter', id: 'lift', shadow: { dy: 8, blur: 12 }, ids: ['card'] },
+        rect('faded', 10, 100, 40, 30),
+        { op: 'mask', id: 'faded', fade: { angle: 0, from: 1, to: 0 } },
+        rect('dim', 10, 200, 40, 30),
+        { op: 'style', ids: ['dim'], style: { opacity: 0.5 } },
+        label('note', 250, 150, '#cccccc'),
+      ]);
+      expect(codes(check(doc, ['contrast']))).toEqual(['low_contrast:note']);
+    });
   });
 
   describe('options', () => {
-    const doc = scene([rect('one', 500, 50, 40, 40), rect('two', 600, 50, 40, 40), rect('p', 100, 100, 50, 50), rect('q', 101.5, 200, 50, 50), rect('r', 300, 100, 50, 50), rect('s', 301.5, 200, 50, 50)]);
+    const doc = scene([rect('one', 500, 50, 40, 40), rect('two', 600, 50, 40, 40), rect('p', 100, 100, 50, 50), rect('q', 101.5, 160, 50, 50), rect('r', 300, 100, 50, 50), rect('s', 301.5, 160, 50, 50)]);
 
     it('restricts per-node checks and pair checks to the given ids', () => {
       expect(codes(check(doc, ['off_canvas'], { ids: ['one'] }))).toEqual(['off_canvas:one']);
@@ -285,6 +403,23 @@ describe('analysis/lint', () => {
       expect(cut.truncated).toBe(true);
     });
 
+    it('lists warnings before infos, then by check priority, then ids, and cuts from the end', () => {
+      const doc = scene([
+        rect('gone', 500, 50, 40, 40),
+        rect('a', 100, 200, 50, 50),
+        rect('b', 101.5, 250, 50, 50),
+        label('one', 50, 100, '#111111'),
+        label('two', 60, 105, '#111111'),
+        rect('edge', 380, 100, 20, 40),
+        rect('speck', 300, 20, 1, 1),
+      ]);
+      const checks: LintCheck[] = ['tiny', 'near_miss', 'off_canvas', 'text_overlap'];
+      expect(codes(check(doc, checks))).toEqual(['off_canvas:gone', 'text_overlap:one+two', 'near_miss:a+b', 'tiny:speck']);
+      const cut = check(doc, checks, { maxIssues: 2 });
+      expect(codes(cut)).toEqual(['off_canvas:gone', 'text_overlap:one+two']);
+      expect(cut.truncated).toBe(true);
+    });
+
     it('lists warnings before infos, then by code and ids', () => {
       const mixed = scene([rect('z', 500, 50, 40, 40), rect('a', 380, 100, 40, 40), rect('b', 0, 0, 1, 1)]);
       expect(codes(check(mixed, ['off_canvas', 'tiny']))).toEqual(['off_canvas:z', 'partly_off_canvas:a', 'tiny:b']);
@@ -292,7 +427,7 @@ describe('analysis/lint', () => {
   });
 
   it('is deterministic whatever order the node map was built in', () => {
-    const doc = scene([rect('bg', 0, 0, 400, 300, '#888888'), label('note', 50, 150, '#777777'), rect('gone', 500, 50, 40, 40), rect('p', 100, 100, 50, 50), rect('q', 101.5, 200, 50, 50)]);
+    const doc = scene([rect('bg', 0, 0, 400, 300, '#888888'), label('note', 50, 150, '#777777'), rect('gone', 500, 50, 40, 40), rect('p', 100, 100, 50, 50), rect('q', 101.5, 160, 50, 50)]);
     const reversed: Doc = { ...doc, nodes: Object.fromEntries(Object.entries(doc.nodes).reverse()) };
     const first = lint(doc, { fonts: FONTS });
     expect(first.issues.length).toBeGreaterThan(2);

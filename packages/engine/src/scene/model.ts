@@ -266,6 +266,12 @@ export function createDocument(input: CreateDocumentInput): Doc {
   };
 }
 
+/** A value from an untrusted document, cut to 40 characters, for a message that echoes it. */
+const shown = (value: unknown): string => {
+  const s = String(value);
+  return s.length > 40 ? `${s.slice(0, 40)}…` : s;
+};
+
 /** Untrusted JSON → Doc: the schema first, then the tree invariants. Throws invalid_document. */
 export function validateDocument(json: unknown): Doc {
   const parsed = DocSchema.safeParse(json);
@@ -280,22 +286,22 @@ export function validateDocument(json: unknown): Doc {
 /** The first token value that is not a color, or paint that is neither a color nor a token; or null. */
 function paintProblem(doc: Doc): string | null {
   for (const [name, value] of Object.entries(doc.tokens)) {
-    if (toSvgColor(value) === undefined) return `token "${name}" holds "${value}", which is not a color`;
+    if (toSvgColor(value) === undefined) return `token "${shown(name)}" holds "${shown(value)}", which is not a color`;
   }
   const bad = (paint: string | undefined) => paint !== undefined && resolvePaint(doc, paint) === undefined;
-  if (bad(doc.canvas.background)) return `background "${doc.canvas.background}" is not a color or a token`;
+  if (bad(doc.canvas.background)) return `background "${shown(doc.canvas.background)}" is not a color or a token`;
   for (const [name, def] of Object.entries(doc.defs)) {
-    if (Object.hasOwn(doc.tokens, name)) return `def "${name}" has the same name as a token`;
+    if (Object.hasOwn(doc.tokens, name)) return `def "${shown(name)}" has the same name as a token`;
     const colors = def.kind === 'filter' ? (def.shadow ? [def.shadow.color] : []) : def.stops.map((s) => s.color);
     const off = colors.find((c) => resolveColor(doc, c) === undefined);
-    if (off !== undefined) return `def "${name}" uses "${off}", which is not a color or a token`;
+    if (off !== undefined) return `def "${shown(name)}" uses "${shown(off)}", which is not a color or a token`;
   }
   for (const node of Object.values(doc.nodes)) {
     for (const key of ['fill', 'stroke'] as const) {
-      if (bad(node.style[key])) return `${key} "${node.style[key]}" of "${node.id}" is not a color, a token or a gradient`;
+      if (bad(node.style[key])) return `${key} "${shown(node.style[key])}" of "${shown(node.id)}" is not a color, a token or a gradient`;
     }
     const filter = node.style.filter;
-    if (filter !== undefined && doc.defs[filter]?.kind !== 'filter') return `filter "${filter}" of "${node.id}" is not a filter def`;
+    if (filter !== undefined && doc.defs[filter]?.kind !== 'filter') return `filter "${shown(filter)}" of "${shown(node.id)}" is not a filter def`;
   }
   return null;
 }
@@ -307,17 +313,17 @@ function paintProblem(doc: Doc): string | null {
  */
 export function integrityProblem(doc: Doc): string | null {
   for (const [key, node] of Object.entries(doc.nodes)) {
-    if (key !== node.id) return `node key "${key}" holds id "${node.id}"`;
+    if (key !== node.id) return `node key "${shown(key)}" holds id "${shown(node.id)}"`;
   }
   const seen = new Set<string>();
   const visit = (ids: readonly string[], parent: string | null): string | null => {
     for (const id of ids) {
       const node = Object.hasOwn(doc.nodes, id) ? doc.nodes[id] : undefined;
-      const where = parent === null ? 'root' : `group "${parent}"`;
-      if (!node) return `"${id}" is listed in ${where} but does not exist`;
-      if (seen.has(id)) return `"${id}" is listed more than once`;
+      const where = parent === null ? 'root' : `group "${shown(parent)}"`;
+      if (!node) return `"${shown(id)}" is listed in ${where} but does not exist`;
+      if (seen.has(id)) return `"${shown(id)}" is listed more than once`;
       seen.add(id);
-      if (node.parent !== parent) return `"${id}" names parent ${JSON.stringify(node.parent)} but is listed in ${where}`;
+      if (node.parent !== parent) return `"${shown(id)}" names parent ${shown(JSON.stringify(node.parent))} but is listed in ${where}`;
       if (node.type === 'group') {
         const problem = visit(node.children, id);
         if (problem) return problem;
@@ -328,5 +334,5 @@ export function integrityProblem(doc: Doc): string | null {
   const problem = visit(doc.root, null);
   if (problem) return problem;
   const orphan = Object.keys(doc.nodes).find((id) => !seen.has(id));
-  return orphan === undefined ? null : `"${orphan}" is not reachable from root`;
+  return orphan === undefined ? null : `"${shown(orphan)}" is not reachable from root`;
 }

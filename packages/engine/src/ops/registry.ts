@@ -158,7 +158,11 @@ class Context implements OpContext {
   node(ref: string): SceneNode {
     if (ref !== '$last') return requireNode(this.doc, ref);
     if (this.last === undefined) {
-      throw new EngineError('invalid_reference', '"$last" was used before any node was created', 'Create a node first, or name it by its id.');
+      throw new EngineError(
+        'invalid_reference',
+        '"$last" has no node to refer to: none was created yet, or the document was undone, restored or loaded since',
+        'Name the node by its id instead; "$last" starts over after undo, restore and load.',
+      );
     }
     return requireNode(this.doc, this.last);
   }

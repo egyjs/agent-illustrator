@@ -29,7 +29,7 @@ export type Metrics = {
   promptTokens: number;
   completionTokens: number;
   ms: number;
-  /** Tools mode: the model ended with a reply, not a tool call or the turn limit. Raw mode: the reply held an SVG that rendered. */
+  /** Tools mode: the model ended with a reply, not a tool call or the turn limit, and a document exists. Raw mode: the reply held an SVG that rendered. */
   finished: boolean;
   error?: string;
 };
@@ -158,7 +158,13 @@ async function runTools(model: ChatModel, brief: Brief, opts: { outDir: string; 
       }
       if (shots.length > 0) messages.push({ role: 'user', content: [{ type: 'text', text: 'Image returned by the tool call above:' }, ...shots] });
     }
-    if (docId) captured = await capture(conn.client, docId);
+    if (docId) {
+      captured = await capture(conn.client, docId);
+    } else {
+      // Nothing to export or render: a reply without a drawing is not a finished run.
+      metrics.finished = false;
+      metrics.error = metrics.error ? `${metrics.error}; no document created` : 'no document created';
+    }
   } finally {
     await conn.close();
   }

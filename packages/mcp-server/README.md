@@ -61,14 +61,14 @@ The `apply_ops` description lists each op's fields; `guide` topic `op:<name>` sh
 
 | Tool | Inputs | Returns |
 |---|---|---|
-| `create_document` | `width`, `height` (px, up to 16384), `background?` (CSS color; omit for transparent), `seed?` (integer; random when omitted) | `{ doc_id, width, height, seed }` |
+| `create_document` | `width`, `height` (px, up to 16384), `background?` (CSS color; omit for transparent), `seed?` (integer; random when omitted) | `{ doc_id, width, height, seed, closed? }`; `closed` lists the documents closed to make room (see Limits) |
 | `apply_ops` | `doc_id`, `ops` (1 to 200 objects `{ "op": name, ... }`; see Limits), `dry_run?` (validate only) | `{ ok, committed, doc_id, results[], lint? }`; each result has `op`, `status`, `id`/`ids`, `bounds`, `warnings` or `error` |
 | `render` | `doc_id`, `overlays?` (`ids`, `bounds`, `grid`), `region?` (`{ x, y, width, height }` in canvas px), `scale?` (up to 8; default 1), `grid?` (spacing in px) | A summary (`width`, `height`, `file`) and a PNG image |
-| `describe_scene` | `doc_id`, `detail?` (`outline`, `normal`, `full`), `root?` (one subtree), `max_nodes?` (1 to 2000; default 300) | `{ canvas, seed, tokens, defs, nodeCount, shown, truncated, nodes[] }` |
+| `describe_scene` | `doc_id`, `detail?` (`outline`, `normal`, `full`), `root?` (one subtree), `max_nodes?` (1 to 2000; default 300) | `{ canvas, seed, tokens, defs, nodeCount, shown, truncated, hint?, nodes[] }`; the list also stops at about 256 KB of JSON, or 20000 path segments at `full`, and `hint` then says to use `root` or a lower `detail` |
 | `measure` | `doc_id`, `ids` (1 to 50 nodes) | `{ nodes: { id: { bounds, center, area, length } }, pairs[] }`; pairs (`gap`, `overlap`, `overlapArea`, `centerDistance`) for 2 to 12 ids |
-| `lint` | `doc_id`, `checks?` (`off_canvas`, `degenerate`, `tiny`, `near_miss`, `text_overlap`, `contrast`, `overlap`; default all but `overlap`), `ids?` (check only these and what is below them), `tolerance?` (near-miss distance, px; default 2), `max_issues?` (1 to 200; default 50) | `{ issues[], truncated, checked[] }`; an issue is `{ code, severity, ids, message, hint, fix? }`, warnings first |
+| `lint` | `doc_id`, `checks?` (`off_canvas`, `degenerate`, `tiny`, `near_miss`, `text_overlap`, `contrast`, `overlap`; default all but `overlap`), `ids?` (check only these and what is below them), `tolerance?` (near-miss distance, px; default 2), `max_issues?` (1 to 200; default 50) | `{ issues[], truncated, checked[] }`; an issue is `{ code, severity, ids, message, hint, fix? }`, warnings first, then in the order `off_canvas`, `degenerate`, `no_ink`, `text_overlap`, `low_contrast`, `near_miss`, `partly_off_canvas`, `tiny`, `overlap`, `empty_group`; `near_miss` stops at 10 issues, and `overlap` and `text_overlap` at 200 pairs (`truncated` says so) |
 | `history` | `doc_id`, `action` (`checkpoint`, `restore`, `undo`, `list`), `label?` (needed by `checkpoint` and `restore`) | `{ doc_id, action, checkpoints, undo_depth, nodes }` |
-| `document_io` | `action` (`save`, `load`, `list`), `doc_id?` (for `save`), `name?` (for `save` and `load`; letters, digits, `_`, `-`, `.`; not a path) | `save`: `{ name, bytes }`; `load`: a new `doc_id`; `list`: `{ documents[] }`. Files are `<name>.json` in `AGENT_ILLUSTRATOR_DOCS_DIR` |
+| `document_io` | `action` (`save`, `load`, `list`), `doc_id?` (for `save`), `name?` (for `save` and `load`; letters, digits, `_`, `-`, `.`; not a path; lowercased, so `Poster` and `poster` are one document) | `save`: `{ name, bytes }`; `load`: a new `doc_id` (and `closed?`, as for `create_document`); `list`: `{ documents[] }`. Files are `<name>.json` in `AGENT_ILLUSTRATOR_DOCS_DIR`; a save writes `<name>.json.tmp` and renames it, and a load is held to the node and segment limits |
 | `export_svg` | `doc_id`, `precision?` (0 to 6 decimals; default 2), `optimize?` (SVGO; default true), `strip_ids?` (default false) | The SVG text |
 | `guide` | `topic?` (`workflow`, a guide name, `ops`, `op:<name>`, `presets`, `preset:<name>`, `text-only`; omit for the index) | The guide text |
 
@@ -93,11 +93,11 @@ Set with environment variables. Exceeding a limit returns an error that says whi
 | `AGENT_ILLUSTRATOR_MAX_DOCUMENTS` (open documents per server) | 50 |
 | `AGENT_ILLUSTRATOR_MAX_RENDER_PIXELS` | 16777216 (4096²) |
 | `AGENT_ILLUSTRATOR_RENDER_DIR` (PNG copies) | `<os tmp>/agent-illustrator` |
-| `AGENT_ILLUSTRATOR_DOCS_DIR` (`document_io` saves and loads) | `<os tmp>/agent-illustrator/docs` |
+| `AGENT_ILLUSTRATOR_DOCS_DIR` (`document_io` saves and loads) | `%LOCALAPPDATA%\agent-illustrator\docs` on Windows, else `$XDG_STATE_HOME` or `~/.local/state` + `/agent-illustrator/docs` (a folder for you alone, created with mode 700) |
 | `AGENT_ILLUSTRATOR_LOG_LEVEL` (stderr JSON logs) | `info` |
 
 Heavy work (booleans, renders) runs synchronously and is bounded by these caps rather than by timeouts.
 Documents live in memory for the life of the server process, under random ids (`doc-3f9a1c`). When the
-document limit is reached, the least recently used document is closed; asking for it later says so.
+document limit is reached, the least recently used document is closed; `create_document` and `document_io` `load` name it in `closed`, and asking for it later says so.
 Each render is also written to `<RENDER_DIR>/<doc_id>-<n>.png` (the last 4 per document) for clients
 that do not show images.

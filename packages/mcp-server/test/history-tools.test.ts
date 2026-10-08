@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRegistry, toSvg } from '@agent-illustrator/engine';
@@ -14,9 +14,9 @@ const scratch = mkdtempSync(join(tmpdir(), 'ai-history-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 /** Tool deps with a documents folder of their own, which does not exist until something is saved. */
-function deps(): ToolDeps {
+function deps(env: Record<string, string> = {}): ToolDeps {
   const root = mkdtempSync(join(scratch, 'case-'));
-  const config = { ...loadConfig({}), renderDir: join(root, 'renders'), docsDir: join(root, 'docs') };
+  const config = { ...loadConfig(env), renderDir: join(root, 'renders'), docsDir: join(root, 'docs') };
   return { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), log: createLogger('silent') };
 }
 const json = (r: ToolResult) => JSON.parse((r.content[0] as { text: string }).text) as { doc_id: string } & Record<string, unknown>;
@@ -181,16 +181,100 @@ describe('document_io tool', () => {
     const d = deps();
     const id = open(d);
     expect(json(io(d, { action: 'list' }))).toEqual({ documents: [] });
-    for (const name of ['zebra', 'Apple', 'mid.v2']) save(d, id, name);
+    for (const name of ['zebra', 'apple', 'mid.v2']) save(d, id, name);
     writeFileSync(join(d.config.docsDir, 'notes.txt'), 'x');
     writeFileSync(join(d.config.docsDir, '.hidden.json'), '{}');
     mkdirSync(join(d.config.docsDir, 'folder.json'));
     const documents = json(io(d, { action: 'list' })).documents as { name: string; bytes: number; modified: string }[];
-    expect(documents.map((x) => x.name)).toEqual(['Apple', 'mid.v2', 'zebra']);
+    expect(documents.map((x) => x.name)).toEqual(['apple', 'mid.v2', 'zebra']);
     for (const x of documents) {
       expect(x.bytes).toBeGreaterThan(0);
       expect(new Date(x.modified).toISOString()).toBe(x.modified);
     }
+  });
+
+  it('lowercases names, so one name is one file whatever the file system', () => {
+    const d = deps();
+    const id = open(d);
+    expect(json(save(d, id, 'Poster-V1')).name).toBe('poster-v1');
+    expect(readdirSync(d.config.docsDir)).toEqual(['poster-v1.json']);
+    save(d, id, 'POSTER-v1');
+    expect(readdirSync(d.config.docsDir)).toEqual(['poster-v1.json']);
+    expect(json(io(d, { action: 'load', name: 'POSTER-V1' }))).toMatchObject({ width: 100 });
+    // A file with capitals that was put there by hand has no name to address it by, so it is not listed.
+    writeFileSync(join(d.config.docsDir, 'Hand.json'), '{}');
+    expect((json(io(d, { action: 'list' })).documents as { name: string }[]).map((x) => x.name)).toEqual(['poster-v1']);
+  });
+
+  it('saves through a temporary file that it renames, and replaces a stale or planted one', () => {
+    const d = deps();
+    const id = open(d);
+    save(d, id, 'draft');
+    const victim = join(scratch, 'victim.txt');
+    writeFileSync(victim, 'keep me');
+    const temp = join(d.config.docsDir, 'draft.json.tmp');
+    writeFileSync(temp, 'left over from a crash');
+    expect(save(d, id, 'draft').isError).toBeUndefined();
+    expect(readdirSync(d.config.docsDir)).toEqual(['draft.json']);
+    try {
+      symlinkSync(victim, temp);
+    } catch {
+      return; // creating links needs a privilege on some systems
+    }
+    expect(save(d, id, 'draft').isError).toBeUndefined();
+    expect(readFileSync(victim, 'utf8')).toBe('keep me');
+    expect(readdirSync(d.config.docsDir)).toEqual(['draft.json']);
+    expect(json(io(d, { action: 'load', name: 'draft' }))).toMatchObject({ width: 100 });
+  });
+
+  it('refuses a link in the place of a document, for saving and for loading', () => {
+    const d = deps();
+    const id = open(d);
+    save(d, id, 'real');
+    const link = join(d.config.docsDir, 'linked.json');
+    try {
+      symlinkSync(join(d.config.docsDir, 'real.json'), link);
+    } catch {
+      return;
+    }
+    expect(errorCode(io(d, { action: 'load', name: 'linked' })).code).toBe('invalid_input');
+    expect(errorCode(save(d, id, 'linked')).code).toBe('invalid_input');
+  });
+
+  it.skipIf(process.platform === 'win32')('creates its folder for the user alone', () => {
+    const d = deps();
+    save(d, open(d), 'mine');
+    expect(statSync(d.config.docsDir).mode & 0o077).toBe(0);
+  });
+
+  it('holds a loaded document to the node and segment limits', () => {
+    const d = deps();
+    const id = open(d);
+    applyOpsTool(d, { doc_id: id, ops: [{ op: 'rect', id: 'a', x: 0, y: 0, width: 5, height: 5 }, { op: 'rect', id: 'b', x: 9, y: 0, width: 5, height: 5 }, { op: 'ellipse', id: 'c', cx: 50, cy: 50, rx: 10 }] });
+    save(d, id, 'three');
+    const tight = (limits: Partial<typeof d.config.limits>): ToolDeps => ({ ...d, config: { ...d.config, limits: { ...d.config.limits, ...limits } } });
+    expect(json(io(tight({ maxNodes: 3 }), { action: 'load', name: 'three' })).nodes).toBe(3);
+    const nodes = errorCode(io(tight({ maxNodes: 2 }), { action: 'load', name: 'three' }));
+    expect(nodes).toMatchObject({ code: 'limit_exceeded', message: '"three" has 3 nodes; the limit is 2' });
+    expect(nodes.hint).toContain('AGENT_ILLUSTRATOR_MAX_NODES');
+    const segments = errorCode(io(tight({ maxSegmentsPerPath: 3 }), { action: 'load', name: 'three' }));
+    expect(segments).toMatchObject({ code: 'limit_exceeded' });
+    expect(segments.message).toMatch(/^path "(a|b|c)" in "three" has \d+ segments; the limit is 3$/);
+    expect(d.sessions.size()).toBe(2);
+  });
+
+  it('says which documents were closed to make room, when creating or loading', () => {
+    const d = deps({ AGENT_ILLUSTRATOR_MAX_DOCUMENTS: '2' });
+    const first = open(d);
+    save(d, first, 'keep');
+    const second = open(d);
+    const created = json(createDocumentTool(d, { width: 10, height: 10 }));
+    expect(created.closed).toEqual([first]);
+    const loaded = json(io(d, { action: 'load', name: 'keep' }));
+    expect(loaded.closed).toEqual([second]);
+    // Nothing closed, nothing said.
+    const roomy = deps();
+    expect(json(createDocumentTool(roomy, { width: 10, height: 10 }))).not.toHaveProperty('closed');
   });
 
   it('names that are not plain names are rejected, and nothing is written outside the folder', () => {

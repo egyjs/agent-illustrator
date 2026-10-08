@@ -62,6 +62,82 @@ describe('render/raster', () => {
     expect(rgba(outside, 5, 5)).toEqual([255, 255, 255, 255]);
   });
 
+  describe('regions and layers', () => {
+    // resvg aborts the whole process on a layer far outside a small render, so a crash here kills the test run.
+    const build = (ops: unknown[]): Doc => {
+      const r = executeBatch(registry, createDocument({ width: 800, height: 600, background: '#ffffff' }), ops);
+      expect(r.ok).toBe(true);
+      return r.doc;
+    };
+    const teal = { fill: 'teal' };
+    const crop = (doc: Doc, region: { x: number; y: number; width: number; height: number }) => rasterize(doc, { region });
+    /** The pixels of a region of a full render, to compare with rendering the region itself. */
+    function cutOut(full: Raster, x: number, y: number, w: number, h: number): Buffer {
+      const rows = Array.from({ length: h }, (_, row) => Buffer.from(full.pixels.subarray(((y + row) * full.width + x) * 4, ((y + row) * full.width + x + w) * 4)));
+      return Buffer.concat(rows);
+    }
+
+    it('renders a small region while shapes far from it carry filters, masks, clips, opacity and blend modes', () => {
+      const doc = build([
+        { op: 'rect', id: 'card', x: 50, y: 50, width: 80, height: 60, style: teal },
+        { op: 'filter', id: 'lift', shadow: { dy: 8, blur: 12 }, ids: ['card'] },
+        { op: 'rect', id: 'soft', x: 300, y: 50, width: 80, height: 60, style: teal },
+        { op: 'filter', id: 'haze', blur: 6, ids: ['soft'] },
+        { op: 'rect', id: 'faded', x: 150, y: 400, width: 80, height: 60, style: teal },
+        { op: 'mask', id: 'faded', fade: { angle: 0, from: 1, to: 0 } },
+        { op: 'rect', id: 'dim', x: 600, y: 300, width: 80, height: 60, style: { ...teal, opacity: 0.5 } },
+        { op: 'rect', id: 'cut', x: 600, y: 50, width: 80, height: 60, style: teal },
+        { op: 'ellipse', id: 'frame', cx: 640, cy: 80, rx: 30 },
+        { op: 'clip', id: 'cut', shape: 'frame' },
+        { op: 'rect', id: 'mixed', x: 20, y: 500, width: 80, height: 60, style: { ...teal, blend: 'multiply' } },
+        { op: 'rect', id: 'near', x: 500, y: 500, width: 20, height: 20, style: { fill: 'red' } },
+      ]);
+      for (const [x, y, w, h] of [[499, 499, 30, 30], [700, 560, 5, 5], [400, 250, 3, 3], [0, 0, 20, 20]] as const) {
+        const img = crop(doc, { x, y, width: w, height: h });
+        expect([img.width, img.height]).toEqual([w, h]);
+      }
+      expect(rgba(crop(doc, { x: 499, y: 499, width: 30, height: 30 }), 10, 10)).toEqual([255, 0, 0, 255]);
+    });
+
+    it('keeps the effects that reach the region: a shadow below its shape still shows', () => {
+      const doc = build([
+        { op: 'rect', id: 'card', x: 50, y: 50, width: 80, height: 60, style: teal },
+        { op: 'filter', id: 'lift', shadow: { dy: 8, blur: 4, color: '#000000' }, ids: ['card'] },
+      ]);
+      const below = crop(doc, { x: 60, y: 105, width: 60, height: 30 });
+      expect(rgba(below, 30, 8)).not.toEqual([255, 255, 255, 255]);
+      expect(rgba(below, 30, 28)).toEqual([255, 255, 255, 255]);
+    });
+
+    it('draws a layer inside another layer the way the full render does', () => {
+      // A canvas-wide group with opacity holds a shape with opacity: in a small region the inner layer lies far from the outer one's corner.
+      const doc = build([
+        { op: 'rect', id: 'sky', x: 0, y: 0, width: 800, height: 600, style: { fill: '#8ecae6' } },
+        { op: 'rect', id: 'glow', x: 630, y: 110, width: 50, height: 50, style: { fill: '#ffb703', opacity: 0.5 } },
+        { op: 'rect', id: 'lamp', x: 400, y: 300, width: 50, height: 50, style: { fill: '#ffb703' } },
+        { op: 'filter', id: 'bloom', shadow: { dx: 6, dy: 6, blur: 5, color: '#000000' }, ids: ['lamp'] },
+        { op: 'group', id: 'scene', ids: ['sky', 'glow', 'lamp'] },
+        { op: 'style', ids: ['scene'], style: { opacity: 0.9 } },
+      ]);
+      const full = rasterize(doc);
+      for (const [x, y, w, h] of [[620, 100, 40, 60], [395, 295, 70, 70], [700, 500, 12, 8]] as const) {
+        const part = crop(doc, { x, y, width: w, height: h });
+        expect(Buffer.from(part.pixels).equals(cutOut(full, x, y, w, h))).toBe(true);
+      }
+    });
+
+    it('lets a layer that is too big to hold whole go flat instead of aborting', () => {
+      const doc = build([
+        { op: 'rect', id: 'sky', x: 0, y: 0, width: 800, height: 600, style: { fill: '#8ecae6' } },
+        { op: 'rect', id: 'glow', x: 630, y: 110, width: 50, height: 50, style: { fill: '#ffb703', opacity: 0.5 } },
+        { op: 'group', id: 'scene', ids: ['sky', 'glow'] },
+        { op: 'style', ids: ['scene'], style: { opacity: 0.9 } },
+      ]);
+      const img = rasterize(doc, { region: { x: 620, y: 100, width: 40, height: 60 }, maxPixels: 4000 });
+      expect([img.width, img.height]).toEqual([40, 60]);
+    });
+  });
+
   it('bounds overlay draws only along node bounds', () => {
     const doc = scene('#ffffff');
     const diff = changed(rasterize(doc), rasterize(doc, { overlays: ['bounds'] }));

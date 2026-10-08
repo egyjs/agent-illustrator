@@ -9,6 +9,10 @@ export type DescribeDetail = 'outline' | 'normal' | 'full';
 export type DescribeOptions = { readonly detail?: DescribeDetail; readonly root?: string; readonly maxNodes?: number };
 
 export const DEFAULT_MAX_NODES = 300;
+/** The description stops adding nodes when its JSON would pass this many characters (roughly bytes)... */
+export const MAX_DESCRIPTION_BYTES = 256 * 1024;
+/** ...or, at full detail, this many path segments. */
+export const MAX_DESCRIPTION_SEGMENTS = 20_000;
 const LEVEL = { outline: 0, normal: 1, full: 2 } as const;
 
 /** Rounds to 0.01. Never returns -0, so equal numbers compare and print the same. */
@@ -68,6 +72,8 @@ export type SceneDescription = {
   /** Nodes listed in `nodes`, nested ones included. */
   readonly shown: number;
   readonly truncated: boolean;
+  /** Set when the size cap, not `maxNodes`, stopped the listing: how to get the rest. */
+  readonly hint?: string;
   readonly nodes: readonly NodeInfo[];
 };
 
@@ -75,7 +81,9 @@ export type SceneDescription = {
  * A structured outline of the scene for an agent to read (FR-10): canvas, tokens, defs and the node
  * tree, depth-first and back → front. At most `maxNodes` nodes are listed, chosen level by level,
  * so the top of the tree is always complete before deeper levels begin; `truncated` says some were
- * left out and groups with missing children carry `childCount`. `root` describes one subtree.
+ * left out and groups with missing children carry `childCount`. `root` describes one subtree. The
+ * listing also stops at MAX_DESCRIPTION_BYTES of JSON, or MAX_DESCRIPTION_SEGMENTS path segments at
+ * full detail, and says so in `hint`; the first node is always listed.
  */
 export function describeScene(doc: Doc, options: DescribeOptions = {}): SceneDescription {
   const { detail = 'normal', root, maxNodes = DEFAULT_MAX_NODES } = options;
@@ -83,11 +91,26 @@ export function describeScene(doc: Doc, options: DescribeOptions = {}): SceneDes
     throw new EngineError('invalid_input', `maxNodes must be a whole number ≥ 1, got ${maxNodes}`, 'Use a count such as 300, or leave maxNodes out.');
   }
   const roots = root === undefined ? doc.root : [requireNode(doc, root).id];
+  const level = LEVEL[detail];
   const listed = new Set<string>();
+  const parts = new Map<string, { readonly base: NodeInfo; readonly rest: Partial<NodeInfo> }>();
   const queue = [...roots];
+  let bytes = 0;
+  let segments = 0;
+  let capped = false;
   for (let i = 0; i < queue.length && listed.size < maxNodes; i++) {
     const node = requireNode(doc, queue[i]!);
+    const part = nodeParts(doc, node, level);
+    const size = JSON.stringify({ ...part.base, ...part.rest }).length + 1; // + the comma after it
+    const segs = level < LEVEL.full || node.type !== 'path' ? 0 : node.subpaths.reduce((n, sp) => n + sp.segs.length, 0);
+    if (listed.size > 0 && (bytes + size > MAX_DESCRIPTION_BYTES || segments + segs > MAX_DESCRIPTION_SEGMENTS)) {
+      capped = true;
+      break;
+    }
+    bytes += size;
+    segments += segs;
     listed.add(node.id);
+    parts.set(node.id, part);
     if (node.type === 'group') for (const child of node.children) queue.push(child);
   }
   const nodeCount = roots.reduce((n, id) => n + subtreeIds(doc, id).length, 0);
@@ -99,22 +122,29 @@ export function describeScene(doc: Doc, options: DescribeOptions = {}): SceneDes
     nodeCount,
     shown: listed.size,
     truncated: listed.size < nodeCount,
-    nodes: roots.filter((id) => listed.has(id)).map((id) => describeNode(doc, id, LEVEL[detail], listed)),
+    ...(capped ? { hint: 'The description was cut to keep it readable. Describe one subtree with root, or use a lower detail, to see the rest.' } : {}),
+    nodes: roots.filter((id) => listed.has(id)).map((id) => assemble(doc, id, parts, listed)),
   };
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
-function describeNode(doc: Doc, id: string, level: number, listed: ReadonlySet<string>): NodeInfo {
+/** A node's own fields: `base` always, `rest` from normal detail up. Children are added when the tree is put together. */
+function nodeParts(doc: Doc, node: SceneNode, level: number): { readonly base: NodeInfo; readonly rest: Partial<NodeInfo> } {
+  const box = worldBounds(doc, node.id);
+  return { base: { id: node.id, type: node.type, bounds: box && roundBox(box) }, rest: level < LEVEL.normal ? {} : { ...normalInfo(doc, node), ...(level < LEVEL.full ? {} : fullInfo(node)) } };
+}
+
+function assemble(doc: Doc, id: string, parts: ReadonlyMap<string, { readonly base: NodeInfo; readonly rest: Partial<NodeInfo> }>, listed: ReadonlySet<string>): NodeInfo {
   const node = requireNode(doc, id);
-  const box = worldBounds(doc, id);
-  const info: Mutable<NodeInfo> = { id, type: node.type, bounds: box && roundBox(box) };
+  const { base, rest } = parts.get(id)!;
+  const info: Mutable<NodeInfo> = { ...base };
   if (node.type === 'group') {
     const shown = node.children.filter((child) => listed.has(child));
-    info.children = shown.map((child) => describeNode(doc, child, level, listed));
+    info.children = shown.map((child) => assemble(doc, child, parts, listed));
     if (shown.length < node.children.length) info.childCount = node.children.length;
   }
-  return level < LEVEL.normal ? info : { ...info, ...normalInfo(doc, node), ...(level < LEVEL.full ? {} : fullInfo(node)) };
+  return { ...info, ...rest };
 }
 
 /** The object without its undefined properties. */
