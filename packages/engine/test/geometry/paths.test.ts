@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { pathBounds, pointAt } from '../../src/geometry/bezier.ts';
-import { arcToCubics, ellipse, line, polyline, quadToCubic } from '../../src/geometry/paths.ts';
+import { signedArea } from '../../src/geometry/flatten.ts';
+import { arcToCubics, ellipse, line, polyline, quadToCubic, roundCorners } from '../../src/geometry/paths.ts';
 import type { Box, Subpath, Vec2 } from '../../src/geometry/types.ts';
-import { expectVec, kappaCircle } from './helpers.ts';
+import { expectVec, KAPPA_CIRCLE_AREA, kappaCircle } from './helpers.ts';
 
 function expectBox(actual: Box | null, expected: Box, digits: number): void {
   expect(actual).not.toBeNull();
@@ -90,5 +91,67 @@ describe('paths: SVG arcs', () => {
   it('zero radius gives a straight segment; equal end points give nothing', () => {
     expect(arcToCubics([0, 0], 0, 10, 0, false, true, [10, 0])).toEqual([line([0, 0], [10, 0])]);
     expect(arcToCubics([5, 5], 10, 10, 0, false, true, [5, 5])).toEqual([]);
+  });
+});
+
+describe('paths: roundCorners', () => {
+  const sq100 = polyline([[0, 0], [100, 0], [100, 100], [0, 100]], true);
+  /** Area of a square of side s with all four corners filleted at r, using KAPPA arcs. */
+  const roundedSquareArea = (s: number, r: number) => s * s - 4 * r * r * (1 - KAPPA_CIRCLE_AREA / 4);
+
+  it('fillets a square: 4 lines + 4 arcs, same bounds, exact area', () => {
+    const { subpath, clamped, skipped } = roundCorners(sq100, 10);
+    expect([clamped, skipped]).toEqual([0, 0]);
+    expect(subpath.segs).toHaveLength(8);
+    expectVec(subpath.start, [10, 0]);
+    expect(subpath.segs.at(-1)!.slice(4)).toEqual([...subpath.start]);
+    expect(pathBounds([subpath])).toEqual({ x: 0, y: 0, width: 100, height: 100 });
+    expect(signedArea([subpath])).toBeCloseTo(roundedSquareArea(100, 10), 6);
+  });
+
+  it('clamps the radius to half the shorter edge: an oversized fillet turns a square into a circle', () => {
+    const { subpath, clamped } = roundCorners(sq100, 100);
+    expect(clamped).toBe(4);
+    expect(subpath.segs).toHaveLength(4); // the zero-length lines between the arcs are dropped
+    expect(signedArea([subpath])).toBeCloseTo(KAPPA_CIRCLE_AREA * 2500, 6);
+  });
+
+  it('uses d = r / tan(φ/2) and k = 4/3·tan((π − φ)/4)·r on a 60° corner', () => {
+    const tri = polyline([[0, 0], [100, 0], [50, 50 * Math.sqrt(3)]], true);
+    const { subpath } = roundCorners(tri, 10);
+    expect(subpath.segs).toHaveLength(6);
+    expectVec(subpath.start, [10 * Math.sqrt(3), 0]);
+    expectVec(subpath.segs[0]!.slice(4) as unknown as Vec2, [100 - 10 * Math.sqrt(3), 0]);
+    expect(subpath.segs[1]![0]).toBeCloseTo(100 - 10 * Math.sqrt(3) + (40 / 3) * Math.tan(Math.PI / 6), 9);
+  });
+
+  it('keeps the end points of an open subpath', () => {
+    const { subpath } = roundCorners(polyline([[0, 0], [100, 0], [100, 100]], false), 10);
+    expect(subpath.start).toEqual([0, 0]);
+    expect(subpath.segs).toHaveLength(3);
+    expect(subpath.segs[0]).toEqual(line([0, 0], [90, 0]));
+    expect(subpath.segs[1]!.slice(4)).toEqual([100, 10]);
+    expect(subpath.segs[2]!.slice(4)).toEqual([100, 100]);
+  });
+
+  it('returns the input unchanged when there is no corner to round', () => {
+    const collinear = polyline([[0, 0], [50, 0], [100, 0]], false);
+    expect(roundCorners(collinear, 10)).toEqual({ subpath: collinear, clamped: 0, skipped: 0 });
+    const circle = kappaCircle(0, 0, 50);
+    expect(roundCorners(circle, 10).subpath).toBe(circle);
+    expect(roundCorners(sq100, 0).subpath).toBe(sq100);
+    expect(roundCorners(sq100, -5).subpath).toBe(sq100);
+  });
+
+  it('skips corners next to a curved segment', () => {
+    const sp: Subpath = { start: [0, 0], closed: false, segs: [[0, 0, 100, 0, 100, 0], [100, 30, 130, 70, 100, 100]] };
+    const r = roundCorners(sp, 10);
+    expect(r.skipped).toBe(1);
+    expect(r.subpath).toBe(sp);
+  });
+
+  it('skips a hairpin where the path folds back on itself', () => {
+    const r = roundCorners(polyline([[0, 0], [100, 0], [50, 0]], false), 10);
+    expect(r.skipped).toBe(1);
   });
 });

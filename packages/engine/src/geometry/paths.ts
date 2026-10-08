@@ -1,3 +1,4 @@
+import { cubics, isStraight, tangentAt } from './bezier.ts';
 import { cosSinDeg } from './transform.ts';
 import type { Seg, Subpath, Vec2 } from './types.ts';
 
@@ -128,4 +129,95 @@ function ellipticArc(
     segs.push([ex(a) + k * dx(a), ey(a) + k * dy(a), x3 - k * dx(b), y3 - k * dy(b), x3, y3]);
   }
   return segs;
+}
+
+export type RoundedCorners = { readonly subpath: Subpath; readonly clamped: number; readonly skipped: number };
+
+type Fillet = { readonly d: number; readonly k: number };
+
+const ANGLE_EPS = 1e-9;
+const LENGTH_EPS = 1e-9;
+
+/**
+ * Fillets every corner between two straight segments (Appendix A "Corner fillet").
+ * - Tangent distance d = r / tan(φ/2), where φ is the interior angle. It is clamped to half of the
+ *   shorter adjacent edge, which shrinks the radius.
+ * - Arc handle length is 4/3·tan((π − φ)/4)·r.
+ *
+ * Counts in the result:
+ * - `clamped`: corners whose radius was reduced.
+ * - `skipped`: corners left sharp because an adjacent segment is curved, or because the path folds
+ *   back on itself.
+ *
+ * Smooth joins are not corners. An open subpath keeps its end points. When nothing is rounded, the
+ * input object is returned as `subpath`.
+ */
+export function roundCorners(sp: Subpath, radius: number): RoundedCorners {
+  const cs = cubics(sp);
+  const n = cs.length;
+  if (!(radius > 0) || n < 2) return { subpath: sp, clamped: 0, skipped: 0 };
+  const edges = cs.map((c) => {
+    const dx = c[6] - c[0], dy = c[7] - c[1];
+    const len = Math.hypot(dx, dy);
+    return { c, len, ux: len > 0 ? dx / len : 0, uy: len > 0 ? dy / len : 0, straight: isStraight(c) };
+  });
+  // fillets[i] is the corner at the start of edge i.
+  const fillets: (Fillet | null)[] = edges.map(() => null);
+  let clamped = 0, skipped = 0;
+  for (let i = sp.closed ? 0 : 1; i < n; i++) {
+    const inc = edges[(i + n - 1) % n]!, out = edges[i]!;
+    if (inc.len < LENGTH_EPS || out.len < LENGTH_EPS) continue;
+    const [ax, ay] = tangentAt(inc.c, 1), [bx, by] = tangentAt(out.c, 0);
+    const cross = Math.abs(ax * by - ay * bx), dot = ax * bx + ay * by;
+    const turn = Math.atan2(cross, dot); // θ = π − φ, the change of direction
+    if (turn < ANGLE_EPS) continue;
+    if (!inc.straight || !out.straight || Math.PI - turn < ANGLE_EPS) {
+      skipped++;
+      continue;
+    }
+    // Half-angle identities instead of Math.tan keep axis-aligned corners exact (tan(π/4) ≠ 1 in floats).
+    const tanHalfPhi = cross / (1 - dot); // tan(φ/2) = sin θ / (1 − cos θ)
+    const tanHalfTurn = cross / (1 + dot); // tan(θ/2)
+    const tanQuarterTurn = tanHalfTurn / (1 + Math.sqrt(1 + tanHalfTurn * tanHalfTurn)); // tan(θ/4)
+    let d = radius / tanHalfPhi, r = radius;
+    const dMax = Math.min(inc.len, out.len) / 2;
+    if (d > dMax) {
+      d = dMax;
+      r = d * tanHalfPhi;
+      clamped++;
+    }
+    fillets[i] = { d, k: (4 / 3) * tanQuarterTurn * r };
+  }
+  if (fillets.every((f) => f === null)) return { subpath: sp, clamped, skipped };
+
+  // Tangent points of the fillet at the start of edge i: on the incoming edge, then on edge i.
+  const before = (i: number, f: Fillet): Vec2 => {
+    const e = edges[(i + n - 1) % n]!, v = edges[i]!.c;
+    return [v[0] - e.ux * f.d, v[1] - e.uy * f.d];
+  };
+  const after = (i: number, f: Fillet): Vec2 => {
+    const e = edges[i]!;
+    return [e.c[0] + e.ux * f.d, e.c[1] + e.uy * f.d];
+  };
+  const f0 = fillets[0];
+  const start: Vec2 = f0 ? after(0, f0) : sp.start;
+  const segs: Seg[] = [];
+  let at = start;
+  for (let i = 0; i < n; i++) {
+    const e = edges[i]!;
+    const j = (i + 1) % n;
+    const next = sp.closed || i + 1 < n ? fillets[j] : null;
+    const end: Vec2 = next ? before(j, next) : [e.c[6], e.c[7]];
+    if (!e.straight) segs.push([e.c[2], e.c[3], e.c[4], e.c[5], e.c[6], e.c[7]]);
+    else if (Math.hypot(end[0] - at[0], end[1] - at[1]) > LENGTH_EPS * Math.max(1, e.len)) segs.push(line(at, end));
+    if (next) {
+      const t2 = j === 0 ? start : after(j, next);
+      const ej = edges[j]!;
+      segs.push([end[0] + e.ux * next.k, end[1] + e.uy * next.k, t2[0] - ej.ux * next.k, t2[1] - ej.uy * next.k, t2[0], t2[1]]);
+      at = t2;
+    } else {
+      at = end;
+    }
+  }
+  return { subpath: { start, segs, closed: sp.closed }, clamped, skipped };
 }
