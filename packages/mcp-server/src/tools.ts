@@ -146,7 +146,7 @@ function inTrace(doc: Doc, id: string): boolean {
  */
 function lintTouched(deps: ToolDeps, doc: Doc, results: readonly OpOutcome[]): LintIssue[] | undefined {
   const named = results.flatMap((o) => (o.status === 'ok' ? [...(o.ids ?? []), ...(o.id === undefined ? [] : [o.id])] : []));
-  // Trace layers are stacked and overlap by design, and their specks are small on purpose, so lint has nothing useful to say about them.
+  // Trace layers are reference geometry: stacked ones overlap by design and specks are small on purpose, so lint has nothing useful to say about them.
   const ids = [...new Set(named)].filter((id) => Object.hasOwn(doc.nodes, id) && !inTrace(doc, id));
   if (ids.length === 0) return undefined;
   try {

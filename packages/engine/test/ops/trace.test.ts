@@ -99,7 +99,7 @@ describe('ops/trace: the group', () => {
   it('records how it was made, and keeps the image reference verbatim', () => {
     const r = run([{ op: 'trace', id: 't', image: 'C:/art/scene.png', colors: 3 }]);
     const group = r.doc.nodes.t as GroupNode;
-    expect(group.meta?.source).toEqual({ kind: 'trace', image: 'C:/art/scene.png', colors: 3, method: 'stacked', speckle: 4, size: { width: 200, height: 100 } });
+    expect(group.meta?.source).toEqual({ kind: 'trace', image: 'C:/art/scene.png', colors: 3, method: 'abutting', speckle: 4, size: { width: 200, height: 100 } });
     expect(group.meta?.source).not.toHaveProperty('region');
   });
 
@@ -126,7 +126,7 @@ describe('ops/trace: the group', () => {
 
 describe('ops/trace: layers', () => {
   it('stacks: the bottom layer fills the whole image and each layer sits on the ones below', () => {
-    const r = run([{ op: 'trace', id: 't', image: 's.png', colors: 3 }]);
+    const r = run([{ op: 'trace', id: 't', image: 's.png', colors: 3, method: 'stacked' }]);
     const [bottom, middle, top] = layers(r, 't');
     expect(bottom!.style.fill).toBe(WHITE);
     expect(middle!.style.fill).toBe(RED);
@@ -139,8 +139,8 @@ describe('ops/trace: layers', () => {
     near(boxOf(r, 't-2'), { x: 80, y: 180, width: 640, height: 240 }, 4);
   });
 
-  it('abuts: layers do not overlap, and together they cover the image', () => {
-    const r = run([{ op: 'trace', id: 't', image: 's.png', colors: 3, method: 'abutting' }]);
+  it('abuts by default: layers do not overlap, and together they cover the image', () => {
+    const r = run([{ op: 'trace', id: 't', image: 's.png', colors: 3 }]);
     const [white, red, blue] = layers(r, 't');
     near(boxOf(r, 't-1'), FIT);
     near(boxOf(r, 't-2'), { x: 480, y: 180, width: 240, height: 240 }, 4);
@@ -155,7 +155,7 @@ describe('ops/trace: layers', () => {
   });
 
   it('stacks more area than abutting does', () => {
-    const stacked = layers(run([{ op: 'trace', id: 't', image: 's.png', colors: 3 }]), 't').reduce((n, p) => n + area(p), 0);
+    const stacked = layers(run([{ op: 'trace', id: 't', image: 's.png', colors: 3, method: 'stacked' }]), 't').reduce((n, p) => n + area(p), 0);
     expect(stacked).toBeGreaterThan(1.15 * 800 * 400);
   });
 
@@ -178,7 +178,7 @@ describe('ops/trace: layers', () => {
 
   it('leaves transparent pixels out and shares only the opaque ones', () => {
     const half = rasterOf(100, 50, (x, y) => (x < 50 ? [0, 0, 0, 0] : rgba(y < 25 ? RED : BLUE)));
-    const r = run([{ op: 'trace', id: 't', image: 'h.png', colors: 3 }], blank(), using(half));
+    const r = run([{ op: 'trace', id: 't', image: 'h.png', colors: 3, method: 'stacked' }], blank(), using(half));
     // Scale 8: the opaque right half is (400, 100, 400, 400).
     near(boxOf(r, 't-1'), { x: 400, y: 100, width: 400, height: 400 });
     expect(shares(r).map((l) => l.share)).toEqual([0.5, 0.5]);
@@ -221,7 +221,7 @@ describe('ops/trace: placement', () => {
 
   it('fits a tall image by its height', () => {
     const tall = rasterOf(100, 200, (x) => rgba(x < 50 ? RED : BLUE));
-    const r = run([{ op: 'trace', id: 't', image: 't.png', colors: 2 }], blank(), using(tall));
+    const r = run([{ op: 'trace', id: 't', image: 't.png', colors: 2, method: 'stacked' }], blank(), using(tall));
     near(boxOf(r, 't-1'), { x: 250, y: 0, width: 300, height: 600 });
   });
 
@@ -328,9 +328,9 @@ describe('ops/trace: errors', () => {
     expect(r.doc).toBe(before);
   });
 
-  it('refuses an image that speckle filtering wipes out', () => {
+  it('refuses a stacked image that speckle filtering wipes out', () => {
     const before = blank();
-    const r = run([{ op: 'trace', image: 'tiny.png', speckle: 64 }], before, using(rasterOf(3, 3, () => rgba(RED))));
+    const r = run([{ op: 'trace', image: 'tiny.png', method: 'stacked', speckle: 64 }], before, using(rasterOf(3, 3, () => rgba(RED))));
     expect(error(r)).toMatchObject({ code: 'invalid_input', message: 'nothing left to trace after speckle filtering', hint: 'Lower speckle or raise max_size.' });
     expect(r.doc).toBe(before);
   });

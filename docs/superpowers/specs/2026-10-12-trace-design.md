@@ -7,7 +7,7 @@ Decisions made with the user (2026-10-12):
 - **Input is a file path.** The agent (Claude Code) has the image and passes its path. No names-only rule and no confined folder for images.
 - **Tracer:** `@visioncortex/vtracer`, the official package from the VTracer authors. It is WASM (no native binary), MIT OR Apache-2.0, and still alpha `1.0.0-alpha.4`, so it gets an exact pin and sits behind one adapter file, with our own code as the fallback.
 - **Color reduction is our code** (seeded k-means), so it stays deterministic.
-- **Layering:** `stacked` by default (no seams). `abutting` gives exact regions that don't overlap.
+- **Layering:** `abutting` by default. It uses VTracer's palette cutout mode, whose regions share edges (0 gap pixels in the spike), so there are no seams. `stacked` is an option: each color runs under the colors above it, so lower layers can show as a thin dark ring at antialiased edges. Stacked was the first choice, when abutting was expected to show seams; the owner switched the default on 2026-10-12 after a real logo trace showed those rings.
 - **Preview before committing:** `apply_ops(..., preview: true)` returns a render of the result without committing.
 - **`todo.md` is updated to match this plan** (it conflicted). See "todo.md changes".
 - It is an op, **`trace`**, in the registry (todo.md: "the op registry is the single source of truth"; §3.2 names a "`trace` op"). So it runs inside `apply_ops` batches, `dry_run`, and later `ops_file` (§2.2). No new tool; the count stays 10.
@@ -42,7 +42,7 @@ apply_ops({doc_id, ops:[{op:'trace', image:'C:/…/logo.png', colors:6}], previe
    - `traceAvailable()` for `--doctor`.
    - Use the package's types, or add a shim like `analysis/rbush-shim.d.ts`.
 5. **`ops/trace.ts`**: op `trace`, domain `paths`, registered in `ops/index.ts`.
-   - Fields: `image` (path string), `region?` `{x,y,width,height}` image px, `colors` 2–32 (default 8), `method` (default `stacked`), `speckle` 0–64 (default 4), `max_size` 64–4096 (default 1024, applied to the region), `x?,y?,width?,height?` (`Length`, placement of the **whole** image; default fits the canvas, centered; one side given derives the other; region traces of one image line up), `id?`, `parent?`.
+   - Fields: `image` (path string), `region?` `{x,y,width,height}` image px, `colors` 2–32 (default 8), `method` (default `abutting`), `speckle` 0–64 (default 4), `max_size` 64–4096 (default 1024, applied to the region), `x?,y?,width?,height?` (`Length`, placement of the **whole** image; default fits the canvas, centered; one side given derives the other; region traces of one image line up), `id?`, `parent?`.
    - RNG: `rngFor(doc.seed, groupId, 'trace')`.
    - Group via `insertNew` (as `ops/repeat.ts:61` does) with `meta.source = {kind:'trace', image, region, colors, method, speckle, size:{w,h}}`. Then `addPath` (`ops/common.ts:104`) per layer, bottom to top: `style.fill = hex`, `fillRule: 'evenodd'`, ids `<group>-1…n`.
    - Over `maxSegmentsPerPath` → `limit_exceeded` with the hint "lower colors or max_size, raise speckle, or trace a smaller region". Fully transparent → `invalid_input`.

@@ -4,7 +4,7 @@ Op: `trace`. It reduces a PNG or JPEG to a few colors and traces each color into
 
 ## Call it
 - `image` is the file's path (absolute, or relative to the server's working directory). Pass the path you were given; the server reads the file, you never paste pixels.
-- The result is one group `id` holding a path per color: `<id>-1` is the largest color, drawn at the back, then smaller colors on top. By default each layer covers everything from its rank up (`stacked`), so there are no seams.
+- The result is one group `id` holding a path per color: `<id>-1` is the largest color, drawn at the back, then smaller colors on top. By default each layer is exactly its own color's area, and neighbors share their edges (`abutting`), so there are no seams.
 - The whole image is fitted to the canvas and centered. `x`, `y`, `width`, `height` place it otherwise; give one of `width` and `height` and the other follows the aspect ratio.
 - The reply lists each layer's `id`, `color` and `share` of the image, so you can see which layer is the background.
 
@@ -33,13 +33,13 @@ apply_ops({ doc_id, preview: true, ops: [
 ```
 
 ## Stacked or abutting
-- `stacked` (default): each layer is a full silhouette under the next. Recolor or delete a top layer and what shows is the layer below.
-- `abutting`: each layer is only its own color's area, with exact edges and no overlap. Use it when you will edit regions one at a time (move, `boolean`, `roughen`); antialiasing can show hairline gaps between neighbors.
+- `abutting` (default): each layer is only its own color's area, with exact shared edges and no overlap. Best for logos and flat art, and for editing regions one at a time (move, `boolean`, `roughen`).
+- `stacked`: each layer is a full silhouette under the next, so recoloring or deleting a top layer shows the layer below. Lower layers can show as a thin dark ring at the antialiased edges of the shapes above them.
 
 ## Clean up
 - The background is usually layer 1: `{"op": "delete", "ids": ["logo-1"]}`. Check the `share` figures first.
 - Recolor layers with `style` (a hex color or a token name), for example after `palette`, so the trace matches the rest of the drawing.
-- `lint` skips the layers of a trace; they overlap on purpose. Draw detail (highlights, outlines, text) with the normal ops on top.
+- `lint` skips the layers of a trace; they are reference geometry, not hand-placed shapes. Draw detail (highlights, outlines, text) with the normal ops on top.
 
 ## Photos
 - Phone photos can carry an EXIF rotation that the tracer ignores. Rotate such a photo upright and save it again before tracing, or the result is sideways.

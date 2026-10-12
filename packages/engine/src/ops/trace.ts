@@ -43,7 +43,7 @@ export const trace = defineOp({
   domain: 'paths',
   description:
     'Vectorize a reference image (PNG or JPEG): reduce it to `colors` colors, then trace each color into one editable path (evenodd) inside a new group, the most common color at the bottom. ' +
-    'method "stacked" (default) lets each color extend under the colors above it, so no seams show; "abutting" gives exact regions that do not overlap. ' +
+    'method "abutting" (default) gives exact regions that meet without seams; "stacked" lets each color extend under the colors above it, so recoloring or deleting a top layer shows the one below. ' +
     'region traces part of the image, in its pixels; x, y, width, height place the whole image (default: fit the canvas), so traces of several regions line up. Trace only images you have the rights to.',
   schema: z.strictObject({
     ...common,
@@ -71,7 +71,7 @@ export const trace = defineOp({
     }
     const box = placement(ctx, img, input);
     const colors = input.colors ?? 8;
-    const method = input.method ?? 'stacked';
+    const method = input.method ?? 'abutting';
     const speckle = input.speckle ?? 4;
     const small = downscale(crop(img, region), input.max_size ?? 1024);
 
