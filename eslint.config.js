@@ -9,6 +9,7 @@ const LAYER_BANS = {
   scene: ['ops', 'analysis', 'render', 'random'],
   analysis: ['ops'],
   render: ['ops', 'analysis'],
+  trace: ['scene', 'ops', 'analysis', 'render'],
   ops: [],
 };
 

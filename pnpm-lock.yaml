@@ -27,6 +27,9 @@ catalogs:
     '@types/pngjs':
       specifier: ^6.0.5
       version: 6.0.5
+    '@visioncortex/vtracer':
+      specifier: 1.0.0-alpha.4
+      version: 1.0.0-alpha.4
     culori:
       specifier: ^4.0.2
       version: 4.0.2
@@ -128,6 +131,9 @@ importers:
       '@resvg/resvg-js':
         specifier: 'catalog:'
         version: 2.6.2
+      '@visioncortex/vtracer':
+        specifier: 'catalog:'
+        version: 1.0.0-alpha.4
       culori:
         specifier: 'catalog:'
         version: 4.0.2
@@ -162,6 +168,9 @@ importers:
       '@resvg/resvg-js':
         specifier: 'catalog:'
         version: 2.6.2
+      '@visioncortex/vtracer':
+        specifier: 'catalog:'
+        version: 1.0.0-alpha.4
       culori:
         specifier: 'catalog:'
         version: 4.0.2
@@ -573,6 +582,10 @@ packages:
   '@typescript-eslint/visitor-keys@8.71.1':
     resolution: {integrity: sha512-0GxiUGqMU0qXJt58cBsiG3DP8lUmBaFo2vChtUX+CT7PnR3v/VGLLrzVP4K9r1lNiZXjHYefMBbPunplr09v6w==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@visioncortex/vtracer@1.0.0-alpha.4':
+    resolution: {integrity: sha512-Hhi+vfG4ealLH1m9alrWo1lM00cWFfur4zeLEcNtzrYUjeEYTgukLNfvOXmuaGe2adugu+jl9o9IUzqHuqFO9g==}
+    engines: {node: '>=16'}
 
   '@vitest/mocker@5.0.3':
     resolution: {integrity: sha512-T8sWAIbkSyAjkwTcaEc3Iu0o9A27X1/kdXrizhZkGuSKScRQtRzclfAMpOTcGdXCsqxeWlpGy3XjqaW8CpLORg==}
@@ -1820,6 +1833,8 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 8.71.1
       eslint-visitor-keys: 5.0.1
+
+  '@visioncortex/vtracer@1.0.0-alpha.4': {}
 
   '@vitest/mocker@5.0.3(vite@8.3.3(@types/node@22.20.5))':
     dependencies:

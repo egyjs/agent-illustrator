@@ -50,4 +50,5 @@ export { createRegistry } from './ops/index.ts';
 export { toSvg, type SvgOptions } from './render/svg.ts';
 export { MAX_RENDER_PIXELS, MAX_SCALE, rasterize, type Overlay, type Raster, type RasterFonts, type RasterOptions } from './render/raster.ts';
 export { decodeImage, imageSize, MAX_IMAGE_PIXELS, type ImageFormat, type RasterImage } from './render/image.ts';
+export { traceAvailable } from './trace/vtracer.ts';
 export { exportSvg, type ExportOptions } from './render/export.ts';
