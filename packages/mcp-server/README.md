@@ -8,7 +8,7 @@ high-level ops; the engine owns the geometry, renders PNG previews the agent can
 Requires Node.js 22.18 or newer. No native build step (resvg ships prebuilt binaries).
 
 ```sh
-npx -y agent-illustrator --doctor   # checks the bundled fonts and content, and that the tracer loads (`tracer: ok`)
+npx -y agent-illustrator --doctor   # checks the bundled fonts and content
 ```
 
 ## Client setup
@@ -80,7 +80,7 @@ Any failure comes back as an error result (`isError`) with `{ error: { code, mes
 
 The `trace` op turns a reference image into editable vectors, like Illustrator's Image Trace: it reduces the image to `colors` colors and traces each into one path, inside one group (`meta.source.kind` `trace`). `image` is the path of a PNG or JPEG file, absolute or relative to the server's working directory; the server reads it, so the agent passes a path, never pixels. Only vectors come back. Other inputs: `method` (`abutting`, the default, whose layers share edges and leave no gaps, or `stacked`), `speckle`, `max_size` (64 to 2048), `region` (a box of the image, in image px) and `x`, `y`, `width`, `height` (where the whole image goes on the canvas). The agent kit has a `trace` guide, and the usual flow is `apply_ops` with `preview: true` first, then the same call for real. Trace only images you have the rights to.
 
-Image files up to 25 MB and 36 megapixels are read (decoded once and kept in a cache of 36 million pixels, one image at the decoder's cap, so the preview and the commit that follows share one decode); a phone photo should be rotated upright first, because EXIF orientation is ignored. `--doctor` prints `tracer: ok`, or why VTracer (the WASM tracer) failed to load, and exits 1.
+Image files up to 25 MB and 36 megapixels are read (decoded once and kept in a cache of 36 million pixels, one image at the decoder's cap, so the preview and the commit that follows share one decode); a phone photo should be rotated upright first, because EXIF orientation is ignored.
 
 ## Prompt
 

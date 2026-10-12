@@ -1,20 +1,22 @@
+import { Resvg } from '@resvg/resvg-js';
 import { describe, expect, it, vi } from 'vitest';
 import { EngineError } from '../../src/errors.ts';
+import { cubics, pointAt } from '../../src/geometry/bezier.ts';
 import type { Box } from '../../src/geometry/types.ts';
 import { createRegistry } from '../../src/ops/index.ts';
 import { executeBatch, type BatchOptions, type BatchResult, type OpOutcome } from '../../src/ops/registry.ts';
 import { trace } from '../../src/ops/trace.ts';
-import type { RasterImage } from '../../src/render/image.ts';
+import { decodeImage, type RasterImage } from '../../src/render/image.ts';
 import { rasterize } from '../../src/render/raster.ts';
 import { toSvg } from '../../src/render/svg.ts';
 import { createDocument, type Doc, type GroupNode, type PathNode } from '../../src/scene/model.ts';
 import { worldBounds } from '../../src/scene/query.ts';
-import { traceMask } from '../../src/trace/vtracer.ts';
+import { isolines } from '../../src/trace/contour.ts';
 import { docOf, expectIntact, groupNode, pathNode, rasterOf, rgba, TEST_IMAGE_COLORS, testImages } from '../fixtures.ts';
 
-vi.mock('../../src/trace/vtracer.ts', async (original) => {
-  const m = await original<typeof import('../../src/trace/vtracer.ts')>();
-  return { ...m, traceMask: vi.fn(m.traceMask) };
+vi.mock('../../src/trace/contour.ts', async (original) => {
+  const m = await original<typeof import('../../src/trace/contour.ts')>();
+  return { ...m, isolines: vi.fn(m.isolines) };
 });
 
 const registry = createRegistry();
@@ -151,8 +153,10 @@ describe('ops/trace: layers', () => {
     near(boxOf(r, 't-1'), FIT);
     near(boxOf(r, 't-2'), { x: 480, y: 180, width: 240, height: 240 }, 4);
     near(boxOf(r, 't-3'), { x: 80, y: 220, width: 160, height: 160 }, 4);
+    // Each layer runs a hidden strip (two traced pixels) under the colors above it, so the areas overlap a little.
     const sum = area(white!) + area(red!) + area(blue!);
-    expect(Math.abs(sum - 800 * 400)).toBeLessThan(0.01 * 800 * 400);
+    expect(sum).toBeGreaterThan(0.99 * 800 * 400);
+    expect(sum).toBeLessThan(1.06 * 800 * 400);
 
     const backdrop = rasterize(r.doc, { region: FIT, background: '#00ff00' });
     let gaps = 0;
@@ -290,7 +294,8 @@ describe('ops/trace: region', () => {
     const part = run([{ op: 'trace', id: 'part', image: 's.png', colors: 3, method: 'abutting', region: right, max_size: 64 }], doc);
     expect(part.results[0]).toMatchObject({ data: { traced: { width: 64, height: 64 } } });
     near(boxOf(part, 'part-1'), right);
-    near(boxOf(part, 'part-2'), { x: 120, y: 20, width: 60, height: 60 }, 2);
+    // One traced pixel is 1.56 px here; the layer's bounds include its hidden strip under the color above.
+    near(boxOf(part, 'part-2'), { x: 120, y: 20, width: 60, height: 60 }, 2 + 100 / 64);
   });
 
   it('places a region of the image together with the placement of the whole image', () => {
@@ -340,11 +345,11 @@ describe('ops/trace: errors', () => {
     expect(r.doc).toBe(before);
   });
 
-  it('stops stacking at the first layer over the limit', () => {
-    vi.mocked(traceMask).mockClear();
-    const r = run([{ op: 'trace', id: 't', image: 's.png', colors: 3, method: 'stacked' }], blank(), { ...using(scene), limits: { maxSegmentsPerPath: 3 } });
+  it.each(['stacked', 'abutting'])('%s: stops at the first layer over the limit', (method) => {
+    vi.mocked(isolines).mockClear();
+    const r = run([{ op: 'trace', id: 't', image: 's.png', colors: 3, method }], blank(), { ...using(scene), limits: { maxSegmentsPerPath: 3 } });
     expect(error(r).code).toBe('limit_exceeded');
-    expect(traceMask).toHaveBeenCalledTimes(1);
+    expect(isolines).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a batch that has no image source', () => {
@@ -397,5 +402,27 @@ describe('ops/trace: errors', () => {
     const r = run([{ op: 'trace', image: 's.png', ...bad }], before);
     expect(error(r).code).toBe('invalid_input');
     expect(r.doc).toBe(before);
+  });
+});
+
+describe('ops/trace: smooth edges', () => {
+  /** A 160×160 antialiased black disc (radius 60) on white, as a decoder hands it over. */
+  const disc = decodeImage(new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="#ffffff"/><circle cx="80" cy="80" r="60" fill="#000000"/></svg>', { font: { loadSystemFonts: false } }).render().asPng());
+  const traceDisc = (method: string) => run([{ op: 'trace', id: 't', image: 'disc.png', colors: 2, width: 160, method }], blank(), using(disc));
+  /** The darkest layer: its outline, sampled, and its segment count. */
+  function outline(r: BatchResult) {
+    const lum = (hex: string) => [1, 3, 5].reduce((n, i) => n + parseInt(hex.slice(i, i + 2), 16), 0);
+    const dark = [...layers(r, 't')].sort((a, b) => lum(a.style.fill!) - lum(b.style.fill!))[0]!;
+    const pts = dark.subpaths.flatMap((sp) => cubics(sp, true).flatMap((c) => Array.from({ length: 24 }, (_, i) => pointAt(c, i / 24))));
+    const radii = pts.map(([x, y]) => Math.hypot(x - 400, y - 300));
+    const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
+    return { segs: dark.subpaths.reduce((n, sp) => n + sp.segs.length, 0), mean, wobble: Math.sqrt(radii.reduce((a, d) => a + (d - mean) ** 2, 0) / radii.length) };
+  }
+
+  it.each(['abutting', 'stacked'])('%s traces a circle as a few smooth curves, not a pixel staircase', (method) => {
+    const { segs, mean, wobble } = outline(traceDisc(method));
+    expect(segs).toBeLessThanOrEqual(16);
+    expect(wobble).toBeLessThan(0.15);
+    expect(Math.abs(mean - 60)).toBeLessThan(0.5);
   });
 });

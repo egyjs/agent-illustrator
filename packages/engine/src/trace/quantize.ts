@@ -1,7 +1,6 @@
 import { converter } from 'culori';
 import { EngineError } from '../errors.ts';
 import type { Rng } from '../random/rng.ts';
-import { TRANSPARENT } from './vtracer.ts';
 
 /**
  * A color-reduced image: `palette` (hex, most pixels first), each color's pixel `counts`, and the
@@ -9,6 +8,8 @@ import { TRANSPARENT } from './vtracer.ts';
  */
 export type Quantized = { readonly palette: string[]; readonly counts: number[]; readonly index: Uint8Array };
 
+/** Palette position of a transparent pixel in `Quantized.index`. */
+export const TRANSPARENT = 255;
 const BINS = 1 << 15;
 const MAX_ROUNDS = 20;
 const toOklab = converter('oklab');
@@ -109,10 +110,4 @@ function kmeans(points: readonly Point[], weights: readonly number[], k: number,
     });
   }
   return assign;
-}
-
-/** For stacked tracing: the mask of layer k holds every opaque pixel whose palette rank is k or more. Pass `into` to reuse one buffer across layers. */
-export function stackedMask(index: Uint8Array, k: number, into: Uint8Array = new Uint8Array(index.length)): Uint8Array {
-  for (let i = 0; i < index.length; i++) into[i] = index[i] !== TRANSPARENT && index[i]! >= k ? 1 : 0;
-  return into;
 }

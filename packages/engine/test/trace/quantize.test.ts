@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { alea } from '../../src/random/rng.ts';
-import { quantize, stackedMask } from '../../src/trace/quantize.ts';
-import { TRANSPARENT } from '../../src/trace/vtracer.ts';
+import { quantize, TRANSPARENT } from '../../src/trace/quantize.ts';
 import { expectCode } from '../fixtures.ts';
 
 /** Pixels from a run-length list of [hex, count] (alpha 255), or [null, count] for transparent. */
@@ -59,21 +58,5 @@ describe('trace/quantize', () => {
     const b = quantize(pixels(runs), 6, alea(3));
     expect(a).toEqual(b);
     expect(a.palette).toHaveLength(6);
-  });
-
-  it('stacks masks: layer k covers every pixel of rank k or above', () => {
-    const index = new Uint8Array([0, 1, 2, TRANSPARENT, 1, 0]);
-    expect([0, 1, 2].map((k) => Array.from(stackedMask(index, k)))).toEqual([
-      [1, 1, 1, 0, 1, 1],
-      [0, 1, 1, 0, 1, 0],
-      [0, 0, 1, 0, 0, 0],
-    ]);
-  });
-
-  it('fills the buffer it is given, replacing what was there', () => {
-    const index = new Uint8Array([0, 1, 2, TRANSPARENT]);
-    const buffer = new Uint8Array(4).fill(7);
-    expect(stackedMask(index, 1, buffer)).toBe(buffer);
-    expect(Array.from(buffer)).toEqual([0, 1, 1, 0]);
   });
 });

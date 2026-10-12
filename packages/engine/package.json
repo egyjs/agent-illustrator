@@ -7,7 +7,6 @@
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
     "@resvg/resvg-js": "catalog:",
-    "@visioncortex/vtracer": "catalog:",
     "culori": "catalog:",
     "immer": "catalog:",
     "paper": "catalog:",

@@ -83,4 +83,4 @@ Evaluation: render regression runs in `pnpm test`; the agent-quality harness dri
 
 ## License
 
-[MIT](LICENSE). Bundled Tajawal fonts: SIL Open Font License ([OFL.txt](packages/engine/assets/fonts/OFL.txt)). Image tracing uses VTracer ([@visioncortex/vtracer](https://github.com/visioncortex/vtracer), MIT OR Apache-2.0).
+[MIT](LICENSE). Bundled Tajawal fonts: SIL Open Font License ([OFL.txt](packages/engine/assets/fonts/OFL.txt)).

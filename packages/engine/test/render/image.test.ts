@@ -6,7 +6,7 @@ import { expectCode } from '../fixtures.ts';
 
 /** A PNG drawn by resvg with pixel-aligned rects, so every pixel has an exact color. */
 const png = (width: number, height: number, body: string): Uint8Array =>
-  new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" shape-rendering="crispEdges">${body}</svg>`).render().asPng();
+  new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" shape-rendering="crispEdges">${body}</svg>`, { font: { loadSystemFonts: false } }).render().asPng();
 const at = (img: RasterImage, x: number, y: number) => Array.from(img.pixels.subarray((y * img.width + x) * 4, (y * img.width + x) * 4 + 4));
 const jpeg = new Uint8Array(readFileSync(new URL('./red-blue.jpg', import.meta.url)));
 

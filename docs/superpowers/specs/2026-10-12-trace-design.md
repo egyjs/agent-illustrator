@@ -142,3 +142,27 @@ Next steps:
    - Drop the "faint antialiasing line" caveat if a 1:1 render shows none.
 5. `pnpm check`, `pnpm build && pnpm smoke`, then regenerate the demo in C:\Users\el3za\tmp\agent-illustrator\trace-demo and compare zoomed renders.
 Separate issue seen: k-means can give a small distinct color's slot (the 0.5% snow cap) to antialiased in-between pixels, depending on the seed. A possible fix is to weight flat-area pixels above edge pixels in the histogram.
+
+## Resolved (2026-10-13): coverage-field tracing replaces VTracer
+Measured with a fidelity harness: each reference is traced at 1:1, the result is re-rendered, and it is compared with pixelmatch (threshold 0.1, antialiased pixels counted) against the input at 1:1, against the vector source at 4×, and within an edge band (pixels within one source pixel of an edge, at 4×).
+
+| | 1:1 | 4× | edge band | palette |
+|---|---|---|---|---|
+| Logo, VTracer cutout | 99.09% | 99.22% | 86.23% | 5 colors, the white snow lost |
+| Logo, coverage tracing | **100.00%** | **99.95%** | **98.38%** | the 6 exact source colors |
+| Mark, VTracer cutout | 99.05% | 99.54% | 89.53% | |
+| Mark, coverage tracing | **99.98%** | **99.95%** | **98.95%** | |
+
+Pipeline (engine `trace/`, no tracing dependency; the approach follows open-vectorizer's published description):
+1. **Palette from interior pixels** (`coverage.ts` `interiorPixels`, `quantize`). Edge pixels are blends and would win phantom slots. A second round adds pixels no blend explains (`unexplained`), so hairlines and dots keep their color.
+2. **Coverage** (`coverage.ts`). Each edge pixel is solved as pixel = t·A + (1 − t)·B in premultiplied RGBA. The pair is searched among the colors of its 3×3 neighborhood, with all pairs as the fallback. Anchoring on the nearest color picked green+white for a navy/sky blend and put the edge 0.16 px off.
+3. **Layer fields** (`contour.ts` `layerField`). Abutting = own coverage, plus colors drawn above within 2 px (a hidden strip). Stacked = own coverage plus every color above.
+4. **Isolines at ½** (`contour.ts`). Marching squares places each crossing from the edge distance its partly covered pixel implies, given the local edge normal. Raw outline error is about 0.035 px RMS against 0.06 px for linear interpolation.
+5. **Fitting** (`fit.ts`):
+   - corners where the outline turns more than 35° over ±2.5 px;
+   - straight runs become lines, with each corner where its neighboring lines meet (this undoes the marching-squares chamfer);
+   - a corner-free loop within 0.06 px RMS of a circle becomes an exact circle (Kåsa fit plus Gauss–Newton refinement);
+   - everything else gets Taubin smoothing (60 passes, no shrinking), then a Bézier fit at 0.04 px.
+   - A circle is now 4 segments; VTracer used 65–126.
+
+Left: the edge band stops short of 99% because of per-pixel noise from the input's antialiasing (about 0.03 px), small glyph details, and pixels where three colors meet.

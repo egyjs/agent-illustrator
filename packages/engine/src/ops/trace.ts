@@ -4,13 +4,17 @@ import { applyToSubpaths, compose, scale, translate } from '../geometry/transfor
 import type { Box } from '../geometry/types.ts';
 import { rngFor } from '../random/rng.ts';
 import type { RasterImage } from '../render/image.ts';
-import { quantize, stackedMask } from '../trace/quantize.ts';
+import { isolines, layerField, loopArea } from '../trace/contour.ts';
+import { coverage, interiorPixels, shares, unexplained } from '../trace/coverage.ts';
+import { fitLoop } from '../trace/fit.ts';
+import { quantize } from '../trace/quantize.ts';
 import { crop, downscale } from '../trace/resample.ts';
-import { traceMask, traceRegions } from '../trace/vtracer.ts';
 import { addPath, common, insertNew, positive, segmentCount } from './common.ts';
 import { defineOp, Length, type OpContext } from './registry.ts';
 
 const pixels = (min: number) => z.number().int().min(min);
+/** How far (pixels) an abutting layer reaches under the colors above it: enough to cover curve-fitting error. */
+const ABUTTING_REACH = 2;
 
 /**
  * Where the whole image lands on the canvas: the box given by `width` and `height`; one of them with
@@ -43,7 +47,8 @@ export const trace = defineOp({
   domain: 'paths',
   description:
     'Vectorize a reference image (PNG or JPEG): reduce it to `colors` colors, then trace each color into one editable path (evenodd) inside a new group, the most common color at the bottom. ' +
-    'method "abutting" (default) gives exact regions that share their edges, leaving no gaps (a faint antialiasing line can still show along them on a light background); "stacked" lets each color extend under the colors above it, so recoloring or deleting a top layer shows the one below. ' +
+    'Edges are placed to a fraction of a pixel from the antialiasing, straight edges come out as lines with sharp corners, and circles as circles. ' +
+    'method "abutting" (default): each layer is the area of its color plus a hidden strip under the colors above it, so visible edges are exact and no gaps show; "stacked": each layer runs under all the colors above it, so recoloring or deleting a top layer shows the one below. ' +
     'region traces part of the image, in its pixels; x, y, width, height place the whole image (default: fit the canvas), so traces of several regions line up. Trace only images you have the rights to.',
   schema: z.strictObject({
     ...common,
@@ -81,10 +86,22 @@ export const trace = defineOp({
       children: [],
       meta: { source: { kind: 'trace', image: input.image, ...(input.region && { region }), colors, method, speckle, size: { width: small.width, height: small.height } } },
     }));
-    const q = quantize(small.pixels, colors, rngFor(ctx.doc.seed, input.image, 'trace'));
-    // Abutting traces every region in one call; stacked traces one layer at a time, so it can stop at the first one over the limit.
-    const regions = method === 'abutting' ? traceRegions(q.index, q.palette, small.width, small.height, { speckle }) : undefined;
-    const mask = new Uint8Array(q.index.length);
+    // The palette comes from the flat insides of shapes: edge pixels are blends that would win slots of their own.
+    // Features too thin to have an inside show up as pixels no blend explains, and join a second round.
+    const inside = interiorPixels(small);
+    const paletteOf = (px: Uint8Array) => quantize(px, colors, rngFor(ctx.doc.seed, input.image, 'trace')).palette;
+    let palette = paletteOf(inside);
+    let cov = coverage(small, palette);
+    const thin = unexplained(small, cov);
+    if (thin.length > 0) {
+      const both = new Uint8Array(inside.length + thin.length);
+      both.set(inside);
+      both.set(thin, inside.length);
+      palette = paletteOf(both);
+      cov = coverage(small, palette);
+    }
+    const sums = shares(cov, palette.length);
+    const total = sums.reduce((a, b) => a + b, 0);
 
     // Traced pixel → source pixel (through the region) → canvas (through the placement of the whole image).
     const toCanvas = compose(
@@ -93,11 +110,12 @@ export const trace = defineOp({
       translate(region.x, region.y),
       scale(region.width / small.width, region.height / small.height),
     );
-    const total = q.counts.reduce((a, b) => a + b, 0);
     const stem = group.slice(0, 58); // leaves room for "-<n>" inside the 64-character id limit
     const made: { id: string; color: string; share: number }[] = [];
-    for (const [k, color] of q.palette.entries()) {
-      const subpaths = regions?.[k] ?? traceMask(stackedMask(q.index, k, mask), small.width, small.height, { speckle });
+    for (const [k, color] of palette.entries()) {
+      // Each layer is traced and checked on its own, so a trace over the limit stops at the first such layer.
+      const loops = isolines(layerField(cov, small.width, small.height, k, method, ABUTTING_REACH), small.width, small.height);
+      const subpaths = loops.filter((loop) => Math.abs(loopArea(loop)) >= speckle * speckle).map((loop) => fitLoop(loop));
       if (subpaths.length === 0) continue;
       const segs = segmentCount(subpaths);
       if (segs > ctx.limits.maxSegmentsPerPath) {
@@ -112,7 +130,7 @@ export const trace = defineOp({
         { id: `${stem}-${k + 1}`, parent: group, style: { fill: color } },
         { prefix: group, subpaths: applyToSubpaths(toCanvas, subpaths), source: { kind: 'trace_layer', color }, fillRule: 'evenodd' },
       );
-      made.push({ id, color, share: Math.round((q.counts[k]! / total) * 1000) / 1000 });
+      made.push({ id, color, share: total > 0 ? Math.round((sums[k]! / total) * 1000) / 1000 : 0 });
     }
     if (made.length === 0) {
       throw new EngineError('invalid_input', 'nothing left to trace after speckle filtering', 'Lower speckle or raise max_size.');

@@ -105,7 +105,7 @@ describe('apply_ops image source', () => {
 
   it('hands the images dependency to the batch, so relative paths resolve against its cwd', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ai-images-'));
-    writeFileSync(join(dir, 'a.png'), new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="7" height="3"><rect width="7" height="3"/></svg>').render().asPng());
+    writeFileSync(join(dir, 'a.png'), new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="7" height="3"><rect width="7" height="3"/></svg>', { font: { loadSystemFonts: false } }).render().asPng());
     const d = deps({ registry: new Registry().register(probe), images: imageSource({ cwd: dir }) });
     const id = open(d);
     expect(json(applyOpsTool(d, { doc_id: id, ops: [{ op: 'probe', image: 'a.png' }] }))).toMatchObject({ ok: true, results: [{ data: { width: 7, height: 3 } }] });
@@ -158,7 +158,7 @@ describe('apply_ops with the trace op', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ai-trace-'));
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="20" height="20" fill="#ff0000"/><rect x="20" width="20" height="20" fill="#0000ff"/><rect x="5" y="5" width="1" height="1" fill="#00ff00"/></svg>';
-    writeFileSync(join(dir, 'flag.png'), new Resvg(svg).render().asPng());
+    writeFileSync(join(dir, 'flag.png'), new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng());
     return join(dir, 'flag.png');
   };
   const trace = (image: string) => ({ op: 'trace', id: 'flag', image, colors: 3, speckle: 0 });

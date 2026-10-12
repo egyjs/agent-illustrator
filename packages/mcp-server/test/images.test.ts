@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { imageSource } from '../src/images.ts';
 
 const png = (w: number, h: number, fill = '#ff0000'): Uint8Array =>
-  new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${fill}"/></svg>`).render().asPng();
+  new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${fill}"/></svg>`, { font: { loadSystemFonts: false } }).render().asPng();
 const folder = (): string => mkdtempSync(join(tmpdir(), 'ai-images-'));
 const failure = (run: () => unknown): EngineError => {
   try {

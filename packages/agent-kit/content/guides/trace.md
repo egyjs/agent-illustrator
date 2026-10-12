@@ -4,7 +4,8 @@ Op: `trace`. It reduces a PNG or JPEG to a few colors and traces each color into
 
 ## Call it
 - `image` is the file's path (absolute, or relative to the server's working directory). Pass the path you were given; the server reads the file, you never paste pixels.
-- The result is one group `id` holding a path per color: `<id>-1` is the largest color, drawn at the back, then smaller colors on top. By default each layer is exactly its own color's area, and neighbors share their edges (`abutting`), so there are no gaps. On a light background a faint antialiasing line can still show along those edges.
+- The result is one group `id` holding a path per color: `<id>-1` is the largest color, drawn at the back, then smaller colors on top. By default (`abutting`) each layer is its color's area plus a hidden 2-pixel strip under the colors drawn above it, so visible edges are exact and no gaps show.
+- Edges are placed to a fraction of a pixel from the image's antialiasing; straight edges become lines with sharp corners and circles become circles, so the result is smooth and light on nodes. Hairlines and small dots keep their color.
 - The whole image is fitted to the canvas and centered. `x`, `y`, `width`, `height` place it otherwise; give one of `width` and `height` and the other follows the aspect ratio.
 - The reply lists each layer's `id`, `color` and `share` of the image, so you can see which layer is the background.
 
@@ -33,7 +34,7 @@ apply_ops({ doc_id, preview: true, ops: [
 ```
 
 ## Stacked or abutting
-- `abutting` (default): each layer is only its own color's area, with exact shared edges and no overlap. Best for logos and flat art, and for editing regions one at a time (move, `boolean`, `roughen`).
+- `abutting` (default): each layer is its own color's area, reaching a hidden strip under its neighbors above. Best for logos and flat art. Moving a region by more than a pixel or two can uncover the strip; for that kind of editing trace again or redraw the shape.
 - `stacked`: each layer is a full silhouette under the next, so recoloring or deleting a top layer shows the layer below. Lower layers can show as a thin dark ring at the antialiased edges of the shapes above them.
 
 ## Clean up
@@ -42,6 +43,6 @@ apply_ops({ doc_id, preview: true, ops: [
 - The `lint` in an `apply_ops` reply skips the layers of a trace; they are reference geometry, not hand-placed shapes. The `lint` tool does not, so expect it to report tiny or near-miss findings on trace layers. Draw detail (highlights, outlines, text) with the normal ops on top.
 
 ## Photos
-- Phone photos can carry an EXIF rotation that the tracer ignores. Rotate such a photo upright and save it again before tracing, or the result is sideways.
+- Phone photos can carry an EXIF rotation that tracing ignores. Rotate such a photo upright and save it again before tracing, or the result is sideways.
 - Large images are read at full size, then reduced; files over 25 MB or 36 megapixels are refused. Scale them down first.
 - Transparent pixels are left out. A fully transparent image is an error.
