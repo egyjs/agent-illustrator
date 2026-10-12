@@ -116,3 +116,29 @@ Per the user's fan-out preference: the lead does 1–3 (foundation and spikes). 
 - vtracer is alpha: exact pin, one adapter file, spike tests that pin the behavior we rely on, a doctor check. The fallback is marching squares + `fit()` (`geometry/paths.ts:246`).
 - Path input lets the agent point at any local file. Only PNG/JPEG headers are accepted, and nothing but vectors comes back, so the tool can't leak file contents.
 - resvg ignores JPEG EXIF orientation (the guide covers it). Big photos can hit the segment cap; the hint points to region, colors, max_size and speckle.
+
+## Open: wavy edges (investigated 2026-10-12, not yet fixed)
+Symptom: traced curves and slanted lines have bumps of about ¼ px (worse when the image is enlarged on the canvas).
+Root cause, measured on a radius-60 disc and a 600×400 logo:
+1. Color reduction snaps each antialiased edge pixel to one palette color, so the tracer sees a 1-pixel staircase.
+2. VTracer's cutout mode (`traceRegions`) follows that staircase closely: 65–126 segments for one circle. Its corner, splice, length and iteration thresholds barely change this, and its `simplify` option opens gaps and rounds corners.
+
+Tried and rejected: supersampling (upscale 2–4× before tracing). The bumps get 2–3× smaller but remain as fine scallops when zoomed, and SVGs grow 5–7×.
+
+Chosen fix (owner approved; no supersampling and no `smooth` option):
+- Trace **abutting** like stacked: one black-and-white mask per color through `traceMask`.
+- The mask is the color's own pixels plus opaque pixels of higher-ranked colors within 1 px of them. Each layer then runs a hidden 1-px strip under the colors drawn above it, so visible edges stay exact and no gaps show.
+- Measured: a circle in **7 segments** (wobble 0.117 px, low-frequency), 0 holes at 8× zoom, an exact square, logo 394 segments (cutout gave 660), no rings around shapes (the strip is the real neighbor's color), and the snow cap is kept.
+- Remaining nit: an occasional slight kink where two curve segments meet (VTracer corner detection).
+
+Next steps:
+1. Tests first:
+   - `abuttingMask(index, w, h, k, reach = 1, into?)` in trace/quantize.ts: own pixels plus a strip into higher ranks only, never into lower ranks or transparent pixels.
+   - An op test: the default abutting traces the disc in ≤ 16 segments with wobble < 0.15.
+2. ops/trace.ts: both methods trace per layer with `traceMask` (stacked uses `stackedMask`, abutting uses `abuttingMask`), with a per-layer segment-limit check.
+3. Remove `traceRegions` and its key-color logic. Keep the op-level tests for black on transparent and for a near-black body with a white mark.
+4. Docs:
+   - The op description, guides/trace.md, the server README and the CHANGELOG say abutting = exact visible edges, each layer a pixel under its neighbors above, no gaps.
+   - Drop the "faint antialiasing line" caveat if a 1:1 render shows none.
+5. `pnpm check`, `pnpm build && pnpm smoke`, then regenerate the demo in C:\Users\el3za\tmp\agent-illustrator\trace-demo and compare zoomed renders.
+Separate issue seen: k-means can give a small distinct color's slot (the 0.5% snow cap) to antialiased in-between pixels, depending on the seed. A possible fix is to weight flat-area pixels above edge pixels in the histogram.
