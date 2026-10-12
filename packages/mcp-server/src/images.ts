@@ -1,12 +1,12 @@
 import { readFileSync, statSync, type Stats } from 'node:fs';
 import { basename, resolve } from 'node:path';
-import { decodeImage, EngineError, type ImageSource, type RasterImage } from '@agent-illustrator/engine';
+import { decodeImage, EngineError, MAX_IMAGE_PIXELS, type ImageSource, type RasterImage } from '@agent-illustrator/engine';
 import { DEVICE } from './history-tools.ts';
 
 /** Largest image file read; the decoder separately caps the pixel count. */
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-/** Decoded pixels kept between calls, so a preview and the commit that follows decode the file once. */
-const CACHE_PIXELS = 64_000_000;
+/** Decoded pixels kept between calls (4 bytes each), so a preview and the commit that follows decode the file once: room for one image at the decoder's cap. */
+const CACHE_PIXELS = MAX_IMAGE_PIXELS;
 
 export type ImageSourceOptions = {
   /** What relative paths resolve against; default the server's working directory. */

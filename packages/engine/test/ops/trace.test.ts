@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EngineError } from '../../src/errors.ts';
 import type { Box } from '../../src/geometry/types.ts';
 import { createRegistry } from '../../src/ops/index.ts';
@@ -9,7 +9,13 @@ import { rasterize } from '../../src/render/raster.ts';
 import { toSvg } from '../../src/render/svg.ts';
 import { createDocument, type Doc, type GroupNode, type PathNode } from '../../src/scene/model.ts';
 import { worldBounds } from '../../src/scene/query.ts';
+import { traceMask } from '../../src/trace/vtracer.ts';
 import { docOf, expectIntact, groupNode, pathNode, rasterOf, rgba, TEST_IMAGE_COLORS, testImages } from '../fixtures.ts';
+
+vi.mock('../../src/trace/vtracer.ts', async (original) => {
+  const m = await original<typeof import('../../src/trace/vtracer.ts')>();
+  return { ...m, traceMask: vi.fn(m.traceMask) };
+});
 
 const registry = createRegistry();
 const blank = (width = 800, height = 600, seed = 1): Doc => createDocument({ width, height, seed });
@@ -184,6 +190,19 @@ describe('ops/trace: layers', () => {
     expect(shares(r).map((l) => l.share)).toEqual([0.5, 0.5]);
   });
 
+  it('abuts a black shape on transparent, and a near-black body with a white mark', () => {
+    const black = rasterOf(100, 60, (x, y) => (x >= 20 && x < 80 && y >= 10 && y < 50 ? rgba('#000000') : [0, 0, 0, 0]));
+    const one = run([{ op: 'trace', id: 't', image: 'b.png', colors: 4 }], blank(), using(black));
+    expect(layers(one, 't').map((p) => p.style.fill)).toEqual(['#000000']);
+
+    const mark = rasterOf(100, 60, (x, y) => {
+      if (x < 20 || x >= 80 || y < 10 || y >= 50) return [0, 0, 0, 0];
+      return rgba(x >= 40 && x < 60 && y >= 25 && y < 35 ? '#ffffff' : '#050505');
+    });
+    const two = run([{ op: 'trace', id: 't', image: 'm.png', colors: 4 }], blank(), using(mark));
+    expect(layers(two, 't').map((p) => p.style.fill)).toEqual(['#050505', '#ffffff']);
+  });
+
   it('is deterministic: the same ops on the same document give the same SVG', () => {
     const shaded = rasterOf(60, 40, (x, y) => [x * 4, y * 6, (x * y) % 256, 255]);
     const once = () => run([{ op: 'trace', id: 't', image: 'p.png', colors: 5 }], blank(800, 600, 7), using(shaded));
@@ -192,6 +211,23 @@ describe('ops/trace: layers', () => {
     expect(layers(a, 't').length).toBeLessThanOrEqual(5);
     expect(toSvg(a.doc)).toBe(toSvg(b.doc));
     expect(a.results).toEqual(b.results);
+  });
+
+  it('picks the same palette for the same image whatever the ids, so a preview matches its commit', () => {
+    const shaded = rasterOf(60, 40, (x, y) => [x * 4, y * 6, (x * y) % 256, 255]);
+    const fills = (r: BatchResult, id: string) => layers(r, id).map((p) => p.style.fill);
+    const named = run([{ op: 'trace', id: 'a', image: 'p.png', colors: 5 }, { op: 'trace', id: 'b', image: 'p.png', colors: 5 }], blank(800, 600, 7), using(shaded));
+    expect(fills(named, 'a')).toHaveLength(5);
+    expect(fills(named, 'b')).toEqual(fills(named, 'a'));
+    const auto = run([{ op: 'trace', image: 'p.png', colors: 5 }, { op: 'trace', image: 'p.png', colors: 5 }], blank(800, 600, 7), using(shaded));
+    expect(fills(auto, 'trace-2')).toEqual(fills(auto, 'trace-1'));
+    expect(fills(auto, 'trace-1')).toEqual(fills(named, 'a'));
+  });
+
+  it('seeds the palette from the document seed', () => {
+    const shaded = rasterOf(60, 40, (x, y) => [x * 4, y * 6, (x * y) % 256, 255]);
+    const palette = (seed: number) => layers(run([{ op: 'trace', id: 't', image: 'p.png', colors: 5 }], blank(800, 600, seed), using(shaded)), 't').map((p) => p.style.fill);
+    expect(new Set([1, 2, 3, 4, 5].map((seed) => palette(seed).join())).size).toBeGreaterThan(1);
   });
 
   it('traces at max_size when the image is larger', () => {
@@ -304,6 +340,13 @@ describe('ops/trace: errors', () => {
     expect(r.doc).toBe(before);
   });
 
+  it('stops stacking at the first layer over the limit', () => {
+    vi.mocked(traceMask).mockClear();
+    const r = run([{ op: 'trace', id: 't', image: 's.png', colors: 3, method: 'stacked' }], blank(), { ...using(scene), limits: { maxSegmentsPerPath: 3 } });
+    expect(error(r).code).toBe('limit_exceeded');
+    expect(traceMask).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses a batch that has no image source', () => {
     const r = run([{ op: 'trace', image: 's.png' }], blank(), {});
     expect(error(r)).toMatchObject({ code: 'invalid_input', message: expect.stringContaining('image source') });
@@ -343,7 +386,7 @@ describe('ops/trace: errors', () => {
     ['a speckle above 64', { speckle: 65 }],
     ['a negative speckle', { speckle: -1 }],
     ['a max_size below 64', { max_size: 63 }],
-    ['a max_size above 4096', { max_size: 4097 }],
+    ['a max_size above 2048', { max_size: 2049 }],
     ['an empty image', { image: '' }],
     ['an unknown field', { palette: ['#ffffff'] }],
     ['a fractional region', { region: { x: 0.5, y: 0, width: 10, height: 10 } }],

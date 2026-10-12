@@ -111,7 +111,8 @@ function kmeans(points: readonly Point[], weights: readonly number[], k: number,
   return assign;
 }
 
-/** For stacked tracing: mask k holds every opaque pixel whose palette rank is k or more. */
-export function stackedMasks(index: Uint8Array, n: number): Uint8Array[] {
-  return Array.from({ length: n }, (_, k) => index.map((r) => (r !== TRANSPARENT && r >= k ? 1 : 0)));
+/** For stacked tracing: the mask of layer k holds every opaque pixel whose palette rank is k or more. Pass `into` to reuse one buffer across layers. */
+export function stackedMask(index: Uint8Array, k: number, into: Uint8Array = new Uint8Array(index.length)): Uint8Array {
+  for (let i = 0; i < index.length; i++) into[i] = index[i] !== TRANSPARENT && index[i]! >= k ? 1 : 0;
+  return into;
 }

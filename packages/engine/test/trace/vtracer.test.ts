@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { pathBounds } from '../../src/geometry/bezier.ts';
 import type { Box, Subpath } from '../../src/geometry/types.ts';
+import { alea } from '../../src/random/rng.ts';
 import { rasterize } from '../../src/render/raster.ts';
+import { quantize } from '../../src/trace/quantize.ts';
 import { TRANSPARENT, traceAvailable, traceMask, traceRegions } from '../../src/trace/vtracer.ts';
 import { docOf, pathNode } from '../fixtures.ts';
 
@@ -57,7 +59,7 @@ describe('trace/vtracer', () => {
     expect(traceMask(m, 80, 80, { speckle: 2 })).toEqual(traceMask(m, 80, 80, { speckle: 2 }));
   });
 
-  it('traces palette regions that meet without seams', () => {
+  it('traces palette regions that meet without gaps', () => {
     const index = mask(120, 120, (x, y) => !inCircle(x, y)); // 0 inside the circle, 1 outside
     const layers = traceRegions(index, ['#c81e1e', '#1e1ec8'], 120, 120, { speckle: 4 });
     expect(layers).toHaveLength(2);
@@ -71,5 +73,58 @@ describe('trace/vtracer', () => {
     for (let i = 0; i < index.length; i++) index[i] = index[i] ? 0 : TRANSPARENT;
     const [layer] = traceRegions(index, ['#336699'], 60, 40, { speckle: 4 });
     near(pathBounds(layer!), { x: 30, y: 0, width: 30, height: 40 });
+  });
+
+  describe('palette colors stay apart', () => {
+    /** A w×h palette index image: `at` gives each pixel a palette position, or TRANSPARENT. */
+    const indexOf = (w: number, h: number, at: (x: number, y: number) => number) => {
+      const m = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) m[y * w + x] = at(x, y);
+      return m;
+    };
+
+    it('keeps a solid black shape on transparent', () => {
+      const layers = traceRegions(indexOf(30, 10, (x) => (x >= 5 && x < 15 ? 0 : TRANSPARENT)), ['#000000'], 30, 10, { speckle: 0 });
+      near(pathBounds(layers[0]!), { x: 5, y: 0, width: 10, height: 10 });
+    });
+
+    it('keeps a near-black body and the white shape inside it', () => {
+      const index = indexOf(40, 30, (x, y) => (x >= 10 && x < 20 && y >= 10 && y < 20 ? 1 : x >= 5 && x < 35 && y >= 5 && y < 25 ? 0 : TRANSPARENT));
+      const [body, inner] = traceRegions(index, ['#050505', '#ffffff'], 40, 30, { speckle: 0 });
+      near(pathBounds(body!), { x: 5, y: 5, width: 30, height: 20 });
+      near(pathBounds(inner!), { x: 10, y: 10, width: 10, height: 10 });
+    });
+
+    it('keeps two grays that are almost the same', () => {
+      const layers = traceRegions(indexOf(20, 10, (x) => (x < 10 ? 0 : 1)), ['#404040', '#464646'], 20, 10, { speckle: 0 });
+      near(pathBounds(layers[0]!), { x: 0, y: 0, width: 10, height: 10 });
+      near(pathBounds(layers[1]!), { x: 10, y: 0, width: 10, height: 10 });
+    });
+
+    it('keeps black, white and mid-gray beside transparent pixels', () => {
+      const index = indexOf(40, 10, (x) => (x < 10 ? 0 : x < 20 ? 1 : x < 30 ? 2 : TRANSPARENT));
+      const layers = traceRegions(index, ['#000000', '#ffffff', '#808080'], 40, 10, { speckle: 0 });
+      layers.forEach((sp, i) => near(pathBounds(sp), { x: i * 10, y: 0, width: 10, height: 10 }));
+    });
+
+    it.each([24, 32])('traces a noisy sunset quantized to %i colors, a layer for each color', (colors) => {
+      const rng = alea('noisy-sunset');
+      const w = 200, h = 150;
+      const pixels = new Uint8Array(w * h * 4);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const t = y / h;
+          const sun = Math.hypot(x - 100, y - 60) < 25;
+          const base = sun ? [255, 240, 200] : [250 - 180 * t, 160 - 100 * t, 120 + 100 * t];
+          const i = (y * w + x) * 4;
+          base.forEach((v, c) => (pixels[i + c] = Math.round(v + Math.floor(rng() * 5) - 2)));
+          pixels[i + 3] = 255;
+        }
+      }
+      const q = quantize(pixels, colors, alea(1));
+      const layers = traceRegions(q.index, q.palette, w, h, { speckle: 0 });
+      expect(layers).toHaveLength(q.palette.length);
+      layers.forEach((sp, i) => expect(sp.length, `layer ${i} ${q.palette[i]}`).toBeGreaterThan(0));
+    });
   });
 });

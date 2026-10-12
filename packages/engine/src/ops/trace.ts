@@ -4,7 +4,7 @@ import { applyToSubpaths, compose, scale, translate } from '../geometry/transfor
 import type { Box } from '../geometry/types.ts';
 import { rngFor } from '../random/rng.ts';
 import type { RasterImage } from '../render/image.ts';
-import { quantize, stackedMasks } from '../trace/quantize.ts';
+import { quantize, stackedMask } from '../trace/quantize.ts';
 import { crop, downscale } from '../trace/resample.ts';
 import { traceMask, traceRegions } from '../trace/vtracer.ts';
 import { addPath, common, insertNew, positive, segmentCount } from './common.ts';
@@ -43,7 +43,7 @@ export const trace = defineOp({
   domain: 'paths',
   description:
     'Vectorize a reference image (PNG or JPEG): reduce it to `colors` colors, then trace each color into one editable path (evenodd) inside a new group, the most common color at the bottom. ' +
-    'method "abutting" (default) gives exact regions that meet without seams; "stacked" lets each color extend under the colors above it, so recoloring or deleting a top layer shows the one below. ' +
+    'method "abutting" (default) gives exact regions that share their edges, leaving no gaps (a faint antialiasing line can still show along them on a light background); "stacked" lets each color extend under the colors above it, so recoloring or deleting a top layer shows the one below. ' +
     'region traces part of the image, in its pixels; x, y, width, height place the whole image (default: fit the canvas), so traces of several regions line up. Trace only images you have the rights to.',
   schema: z.strictObject({
     ...common,
@@ -52,7 +52,7 @@ export const trace = defineOp({
     colors: z.number().int().min(2).max(32).optional(),
     method: z.enum(['stacked', 'abutting']).optional(),
     speckle: z.number().int().min(0).max(64).optional(),
-    max_size: z.number().int().min(64).max(4096).optional(),
+    max_size: z.number().int().min(64).max(2048).optional(),
     x: Length.optional(),
     y: Length.optional(),
     width: Length.optional(),
@@ -73,7 +73,7 @@ export const trace = defineOp({
     const colors = input.colors ?? 8;
     const method = input.method ?? 'abutting';
     const speckle = input.speckle ?? 4;
-    const small = downscale(crop(img, region), input.max_size ?? 1024);
+    const small = downscale(input.region ? crop(img, region) : img, input.max_size ?? 1024);
 
     const group = insertNew(ctx, input, 'trace', (base) => ({
       ...base,
@@ -81,11 +81,10 @@ export const trace = defineOp({
       children: [],
       meta: { source: { kind: 'trace', image: input.image, ...(input.region && { region }), colors, method, speckle, size: { width: small.width, height: small.height } } },
     }));
-    const q = quantize(small.pixels, colors, rngFor(ctx.doc.seed, group, 'trace'));
-    const layers =
-      method === 'stacked'
-        ? stackedMasks(q.index, q.palette.length).map((mask) => traceMask(mask, small.width, small.height, { speckle }))
-        : traceRegions(q.index, q.palette, small.width, small.height, { speckle });
+    const q = quantize(small.pixels, colors, rngFor(ctx.doc.seed, input.image, 'trace'));
+    // Abutting traces every region in one call; stacked traces one layer at a time, so it can stop at the first one over the limit.
+    const regions = method === 'abutting' ? traceRegions(q.index, q.palette, small.width, small.height, { speckle }) : undefined;
+    const mask = new Uint8Array(q.index.length);
 
     // Traced pixel → source pixel (through the region) → canvas (through the placement of the whole image).
     const toCanvas = compose(
@@ -97,9 +96,9 @@ export const trace = defineOp({
     const total = q.counts.reduce((a, b) => a + b, 0);
     const stem = group.slice(0, 58); // leaves room for "-<n>" inside the 64-character id limit
     const made: { id: string; color: string; share: number }[] = [];
-    for (const [k, subpaths] of layers.entries()) {
+    for (const [k, color] of q.palette.entries()) {
+      const subpaths = regions?.[k] ?? traceMask(stackedMask(q.index, k, mask), small.width, small.height, { speckle });
       if (subpaths.length === 0) continue;
-      const color = q.palette[k]!;
       const segs = segmentCount(subpaths);
       if (segs > ctx.limits.maxSegmentsPerPath) {
         throw new EngineError(

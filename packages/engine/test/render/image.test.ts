@@ -27,6 +27,11 @@ describe('render/image', () => {
     expect(imageSize(jpeg)).toEqual({ width: 16, height: 8, format: 'jpeg' });
   });
 
+  it('reads a JPEG whose frame header ends exactly at the end of the bytes', () => {
+    const sof0 = new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x08, 0x00, 0x10]);
+    expect(imageSize(sof0)).toEqual({ width: 16, height: 8, format: 'jpeg' });
+  });
+
   it('refuses bytes that are not a PNG or JPEG', () => {
     expectCode(() => imageSize(new TextEncoder().encode('<svg></svg>')), 'invalid_input');
     expectCode(() => imageSize(new Uint8Array(0)), 'invalid_input');

@@ -7,7 +7,7 @@ Decisions made with the user (2026-10-12):
 - **Input is a file path.** The agent (Claude Code) has the image and passes its path. No names-only rule and no confined folder for images.
 - **Tracer:** `@visioncortex/vtracer`, the official package from the VTracer authors. It is WASM (no native binary), MIT OR Apache-2.0, and still alpha `1.0.0-alpha.4`, so it gets an exact pin and sits behind one adapter file, with our own code as the fallback.
 - **Color reduction is our code** (seeded k-means), so it stays deterministic.
-- **Layering:** `abutting` by default. It uses VTracer's palette cutout mode, whose regions share edges (0 gap pixels in the spike), so there are no seams. `stacked` is an option: each color runs under the colors above it, so lower layers can show as a thin dark ring at antialiased edges. Stacked was the first choice, when abutting was expected to show seams; the owner switched the default on 2026-10-12 after a real logo trace showed those rings.
+- **Layering:** `abutting` by default. It uses VTracer's palette cutout mode, whose regions share edges (0 gap pixels in the spike), so the geometry has no gaps; a faint antialiasing line can still show along the shared edges on a light background. `stacked` is an option: each color runs under the colors above it, so lower layers can show as a thin dark ring at antialiased edges. Stacked was the first choice, when abutting was expected to show seams; the owner switched the default on 2026-10-12 after a real logo trace showed those rings.
 - **Preview before committing:** `apply_ops(..., preview: true)` returns a render of the result without committing.
 - **`todo.md` is updated to match this plan** (it conflicted). See "todo.md changes".
 - It is an op, **`trace`**, in the registry (todo.md: "the op registry is the single source of truth"; §3.2 names a "`trace` op"). So it runs inside `apply_ops` batches, `dry_run`, and later `ops_file` (§2.2). No new tool; the count stays 10.
@@ -18,7 +18,7 @@ Scope: PNG + JPEG (whatever the resvg decode spike confirms), one op, `preview` 
 ```
 apply_ops({doc_id, ops:[{op:'trace', image:'C:/…/logo.png', colors:6}], preview:true})
   server images.ts  ImageSource.get(path): resolve vs cwd, device-name/stat/size checks, read
-     └─ decodeImage(bytes) (engine render/image.ts, resvg) → RasterImage {width,height,pixels}; LRU of 4
+     └─ decodeImage(bytes) (engine render/image.ts, resvg) → RasterImage {width,height,pixels}; LRU by pixels
   executeBatch(registry, doc, ops, { images, … })
      op trace (ops/trace.ts) → ctx.image(path)
         crop region → downscale to max_size → quantize (trace/quantize.ts)
@@ -36,15 +36,17 @@ apply_ops({doc_id, ops:[{op:'trace', image:'C:/…/logo.png', colors:6}], previe
    - If resvg can't decode exactly, the fallback is `pngjs` (catalog, pure JS, PNG only).
 3. **`trace/quantize.ts`** (new layer `trace`: may import `geometry`, `random`):
    - `quantize(pixels, colors, rng)`: alpha < 128 is transparent. A 5-bit/channel histogram feeds OKLab (`culori`), then weighted k-means++ (≤ 20 iterations), with k = min(colors, non-empty bins). Palette colors are the weighted sRGB means as hex, merged when equal, sorted by pixel count, largest first.
-   - `layerMasks(index, n, 'stacked'|'abutting')`: stacked mask k = rank ≥ k, abutting = rank == k.
+   - `stackedMask(index, k, into?)`: stacked mask k = rank ≥ k, built one layer at a time into a reusable buffer. Abutting regions come from `traceRegions`.
 4. **`trace/vtracer.ts`**: the only importer of `@visioncortex/vtracer`, loaded lazily through `createRequire` so a load failure fails only `trace`, never startup.
    - `traceMask(mask, w, h, {speckle}) → Subpath[]` uses `convertPixels(rgba, w, h, {clustering:'bw', mode:'spline', filterSpeckle, cornerThreshold:60, lengthThreshold:4, spliceThreshold:45, maxIterations:10, pathPrecision:3})`. The `<path d transform=translate>` output goes through `parsePathData` (`geometry/pathdata.ts:13`) and `translate` (`geometry/transform.ts:30`).
+   - `traceRegions(index, palette, w, h, {speckle})` uses the palette cutout mode (`colorPrecision: 8`, `layerDifference: 0`, so VTracer never merges palette colors). Transparent pixels get a key color: of the 27 colors with channels in {0, 128, 255}, the one farthest from every palette color. A fill that is not in the palette goes to the nearest palette color.
    - `traceAvailable()` for `--doctor`.
    - Use the package's types, or add a shim like `analysis/rbush-shim.d.ts`.
 5. **`ops/trace.ts`**: op `trace`, domain `paths`, registered in `ops/index.ts`.
-   - Fields: `image` (path string), `region?` `{x,y,width,height}` image px, `colors` 2–32 (default 8), `method` (default `abutting`), `speckle` 0–64 (default 4), `max_size` 64–4096 (default 1024, applied to the region), `x?,y?,width?,height?` (`Length`, placement of the **whole** image; default fits the canvas, centered; one side given derives the other; region traces of one image line up), `id?`, `parent?`.
-   - RNG: `rngFor(doc.seed, groupId, 'trace')`.
+   - Fields: `image` (path string), `region?` `{x,y,width,height}` image px, `colors` 2–32 (default 8), `method` (default `abutting`), `speckle` 0–64 (default 4), `max_size` 64–2048 (default 1024, applied to the region), `x?,y?,width?,height?` (`Length`, placement of the **whole** image; default fits the canvas, centered; one side given derives the other; region traces of one image line up), `id?`, `parent?`.
+   - RNG: `rngFor(doc.seed, image, 'trace')`, seeded from the image reference rather than the group id, so a preview and the commit that follows get the same palette even when auto ids differ.
    - Group via `insertNew` (as `ops/repeat.ts:61` does) with `meta.source = {kind:'trace', image, region, colors, method, speckle, size:{w,h}}`. Then `addPath` (`ops/common.ts:104`) per layer, bottom to top: `style.fill = hex`, `fillRule: 'evenodd'`, ids `<group>-1…n`.
+   - Stacked layers are traced one at a time and abutting regions in one call; each layer is checked against the limit as soon as it exists, so a stacked call fails at the first offending layer.
    - Over `maxSegmentsPerPath` → `limit_exceeded` with the hint "lower colors or max_size, raise speckle, or trace a smaller region". Fully transparent → `invalid_input`.
    - Returns `{id, ids, data:{layers:[{id,color,share}], image:{width,height}, traced:{width,height}}}`.
    - The description includes "Trace only images you have the rights to." Example: `{op:'trace', id:'logo', image:'logo.png', colors:4}`. The op's test file runs it with a fixture `ImageSource`.
@@ -54,13 +56,13 @@ apply_ops({doc_id, ops:[{op:'trace', image:'C:/…/logo.png', colors:6}], previe
 ## MCP server
 - **`images.ts`** (new): `imageSource(): ImageSource`.
   - `get(path)`: `resolve(path)` against the server cwd. Refuse Windows device names (export `DEVICE` from `history-tools.ts:46`). `statSync` must be a file. ≤ `MAX_IMAGE_BYTES = 25 MB`.
-  - Read, then `decodeImage`, cached in an LRU of 4 keyed by resolved path + mtime + size.
+  - Read, then `decodeImage`, cached in an LRU keyed by resolved path + mtime + size, with a budget of `MAX_IMAGE_PIXELS` (36 million) decoded pixels: one image at the decoder's cap.
   - Errors name the resolved path and the cwd, and never echo file bytes. The hint is "pass an absolute path to a PNG or JPEG".
 - **`tools.ts` `apply_ops`**:
   - Pass `images` to `executeBatch`.
   - New optional `preview: boolean`: run the batch, never commit, and return the usual result body plus a `rasterize` PNG of the would-be document (`fonts`, `maxRenderPixels`). It implies `dry_run`.
   - Add `preview` to `applyOpsInputSchema`.
-  - `lintTouched` skips ids inside a `meta.source.kind === 'trace'` group (stacked layers overlap by design).
+  - `lintTouched` skips ids inside a `meta.source.kind === 'trace'` group (stacked layers overlap by design). Only that lint, in the `apply_ops` reply, skips them; the standalone `lint` tool does not.
 - **`cli.ts`**: add `images: imageSource()` to `deps`. `--doctor` prints `tracer: ok` or the reason (exit 1).
 
 ## Agent kit and docs

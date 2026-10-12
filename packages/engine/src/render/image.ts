@@ -34,7 +34,7 @@ export function imageSize(bytes: Uint8Array): { width: number; height: number; f
 /** Walks JPEG markers to the first start-of-frame (SOF0–SOF15 except DHT, JPG and DAC). */
 function jpegSize(bytes: Uint8Array, view: DataView): { width: number; height: number; format: 'jpeg' } | undefined {
   let i = 2;
-  while (i + 9 < bytes.length) {
+  while (i + 9 <= bytes.length) {
     if (bytes[i] !== 0xff) return undefined;
     const marker = bytes[i + 1]!;
     if (marker === 0xff) {

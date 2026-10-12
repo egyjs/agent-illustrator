@@ -74,13 +74,13 @@ The `apply_ops` description lists each op's fields; `guide` topic `op:<name>` sh
 
 Any failure comes back as an error result (`isError`) with `{ error: { code, message, hint } }`: `invalid_input`, `unknown_id`, `limit_exceeded` and so on. The hint says how to fix the call. In an `apply_ops` batch the error sits on the failing op, and nothing is applied.
 
-`apply_ops` lints the nodes a committed batch created or changed (the cheap checks only, at most 10 issues) and adds them as `lint`; the field is absent when there is nothing to report. The layers of a `trace` group are skipped: they overlap on purpose.
+`apply_ops` lints the nodes a committed batch created or changed (the cheap checks only, at most 10 issues) and adds them as `lint`; the field is absent when there is nothing to report. The layers of a `trace` group are skipped there (stacked layers overlap on purpose); the `lint` tool does not skip them.
 
 ## Reference images
 
-The `trace` op turns a reference image into editable vectors, like Illustrator's Image Trace: it reduces the image to `colors` colors and traces each into one path, inside one group (`meta.source.kind` `trace`). `image` is the path of a PNG or JPEG file, absolute or relative to the server's working directory; the server reads it, so the agent passes a path, never pixels. Only vectors come back. Other inputs: `method` (`abutting`, the default, or `stacked`), `speckle`, `max_size`, `region` (a box of the image, in image px) and `x`, `y`, `width`, `height` (where the whole image goes on the canvas). The agent kit has a `trace` guide, and the usual flow is `apply_ops` with `preview: true` first, then the same call for real. Trace only images you have the rights to.
+The `trace` op turns a reference image into editable vectors, like Illustrator's Image Trace: it reduces the image to `colors` colors and traces each into one path, inside one group (`meta.source.kind` `trace`). `image` is the path of a PNG or JPEG file, absolute or relative to the server's working directory; the server reads it, so the agent passes a path, never pixels. Only vectors come back. Other inputs: `method` (`abutting`, the default, whose layers share edges and leave no gaps, or `stacked`), `speckle`, `max_size` (64 to 2048), `region` (a box of the image, in image px) and `x`, `y`, `width`, `height` (where the whole image goes on the canvas). The agent kit has a `trace` guide, and the usual flow is `apply_ops` with `preview: true` first, then the same call for real. Trace only images you have the rights to.
 
-Image files up to 25 MB and 36 megapixels are read (decoded once and kept in a small cache, so the preview and the commit that follows share one decode); a phone photo should be rotated upright first, because EXIF orientation is ignored. `--doctor` prints `tracer: ok`, or why VTracer (the WASM tracer) failed to load, and exits 1.
+Image files up to 25 MB and 36 megapixels are read (decoded once and kept in a cache of 36 million pixels, one image at the decoder's cap, so the preview and the commit that follows share one decode); a phone photo should be rotated upright first, because EXIF orientation is ignored. `--doctor` prints `tracer: ok`, or why VTracer (the WASM tracer) failed to load, and exits 1.
 
 ## Prompt
 

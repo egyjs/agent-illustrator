@@ -44,7 +44,11 @@ export function downscale(img: Bitmap, maxSide: number): Bitmap {
         }
       }
       if (alpha === 0) continue;
-      out.set([Math.round(r / alpha), Math.round(g / alpha), Math.round(b / alpha), Math.round(alpha / area)], (oy * width + ox) * 4);
+      const o = (oy * width + ox) * 4;
+      out[o] = Math.round(r / alpha);
+      out[o + 1] = Math.round(g / alpha);
+      out[o + 2] = Math.round(b / alpha);
+      out[o + 3] = Math.round(alpha / area);
     }
   }
   return { width, height, pixels: out };

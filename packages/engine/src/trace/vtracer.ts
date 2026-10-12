@@ -61,40 +61,74 @@ function parse(svg: string): TracedPath[] {
 export function traceMask(mask: Uint8Array, width: number, height: number, opts: TraceOptions): Subpath[] {
   const rgba = new Uint8Array(width * height * 4);
   for (let i = 0; i < mask.length; i++) {
-    const v = mask[i] ? 0 : 255;
-    rgba.set([v, v, v, 255], i * 4);
+    const p = i * 4;
+    rgba[p] = rgba[p + 1] = rgba[p + 2] = mask[i] ? 0 : 255;
+    rgba[p + 3] = 255;
   }
   const svg = vtracer().convertPixels(rgba, width, height, { ...FIT, clustering: 'bw', filterSpeckle: opts.speckle });
   return parse(svg).filter((p) => p.fill === '#000000').flatMap((p) => p.subpaths);
 }
 
 const rgbOf = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
-const hexOf = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+const dist2 = (a: readonly number[], b: readonly number[]) => (a[0]! - b[0]!) ** 2 + (a[1]! - b[1]!) ** 2 + (a[2]! - b[2]!) ** 2;
+const hexOf = ([r, g, b]: readonly number[]) => `#${[r, g, b].map((v) => v!.toString(16).padStart(2, '0')).join('')}`;
+
+/** Colors with every channel 0, 128 or 255: the pool the transparency key is picked from. */
+const KEYS = [0, 128, 255].flatMap((r) => [0, 128, 255].flatMap((g) => [0, 128, 255].map((b): [number, number, number] => [r, g, b])));
+
+/** The key color farthest from every palette color (the first of equals), so no region can be mistaken for it. */
+function keyFor(palette: readonly (readonly number[])[]): [number, number, number] {
+  let best = KEYS[0]!;
+  let far = -1;
+  for (const key of KEYS) {
+    const near = Math.min(...palette.map((c) => dist2(c, key)));
+    if (near > far) {
+      far = near;
+      best = key;
+    }
+  }
+  return best;
+}
 
 /**
  * Outlines of each palette color's pixels (`index` holds palette positions, TRANSPARENT for none),
- * as one list of subpaths per color. Neighboring regions share their edges, so they meet without
- * seams. Transparent pixels get a color outside the palette whose regions are dropped.
+ * as one list of subpaths per color. Neighboring regions share their edges, so they leave no gaps.
+ * Transparent pixels get a key color far from the palette whose regions are dropped. VTracer is told
+ * not to merge similar colors, so every palette color keeps its own layer.
  */
 export function traceRegions(index: Uint8Array, palette: readonly string[], width: number, height: number, opts: TraceOptions): Subpath[][] {
   const colors = palette.map((c) => c.toLowerCase());
-  let k = 0x010203;
-  while (colors.includes(hexOf(k))) k++;
-  const key = hexOf(k);
-  const rgb = [...colors, key].map(rgbOf);
+  const rgb = colors.map(rgbOf);
+  const keyRgb = keyFor(rgb);
+  const key = hexOf(keyRgb);
+  const all = [...rgb, keyRgb];
   const rgba = new Uint8Array(width * height * 4);
   for (let i = 0; i < index.length; i++) {
-    const c = rgb[index[i] === TRANSPARENT ? colors.length : index[i]!]!;
-    rgba.set([c[0], c[1], c[2], 255], i * 4);
+    const c = all[index[i] === TRANSPARENT ? colors.length : index[i]!]!;
+    const p = i * 4;
+    rgba[p] = c[0];
+    rgba[p + 1] = c[1];
+    rgba[p + 2] = c[2];
+    rgba[p + 3] = 255;
   }
-  const svg = vtracer().convertPixels(rgba, width, height, { ...FIT, clustering: 'color-cluster', hierarchical: 'cutout', palette: [...colors, key], filterSpeckle: opts.speckle });
+  const svg = vtracer().convertPixels(rgba, width, height, {
+    ...FIT,
+    clustering: 'color-cluster',
+    hierarchical: 'cutout',
+    colorPrecision: 8,
+    layerDifference: 0,
+    palette: [...colors, key],
+    filterSpeckle: opts.speckle,
+  });
   const layers = colors.map((): Subpath[] => []);
   const slot = new Map(colors.map((c, i) => [c.toUpperCase(), i]));
+  const nearest = (fill: string): number => {
+    const c = rgbOf(fill.toLowerCase());
+    return rgb.reduce((best, p, i) => (dist2(p, c) < dist2(rgb[best]!, c) ? i : best), 0);
+  };
   for (const p of parse(svg)) {
     if (p.fill === key.toUpperCase()) continue;
-    const i = slot.get(p.fill);
-    if (i === undefined) throw new EngineError('internal_error', `the tracer returned color ${p.fill}, which is not in the palette`, 'Trace with method "stacked" instead.');
-    layers[i]!.push(...p.subpaths);
+    layers[slot.get(p.fill) ?? nearest(p.fill)]!.push(...p.subpaths);
   }
   return layers;
 }

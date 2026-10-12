@@ -30,7 +30,7 @@ if (arg === '--version') {
   for (const file of fonts.files) process.stderr.write(`font: ${file}\n`);
   const tracer = traceAvailable();
   process.stderr.write(`tracer: ${tracer === true ? 'ok' : tracer}\n`);
-  if (tracer !== true) process.exit(1);
+  if (tracer !== true) process.exitCode = 1; // not process.exit: the line above must reach a piped stderr
 } else if (arg === undefined || arg === '--stdio') {
   const config = loadConfig();
   const log = createLogger(config.logLevel);

@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-- `trace` op: reduces a reference PNG or JPEG to N colors and traces each into an editable path (VTracer, `@visioncortex/vtracer`), abutting (default, seam-free) or stacked, with `region` and placement. The 37th op.
+- `trace` op: reduces a reference PNG or JPEG to N colors and traces each into an editable path (VTracer, `@visioncortex/vtracer`), abutting (default, no gaps between layers) or stacked, with `region` and placement. The 37th op.
 - `apply_ops` `preview: true` runs a batch without changing the document and returns a PNG of the result.
-- Image source: the server reads reference images from a file path (PNG or JPEG, up to 25 MB and 36 megapixels) and caches the decoded pixels. Lint skips the layers of a trace group.
+- Image source: the server reads reference images from a file path (PNG or JPEG, up to 25 MB and 36 megapixels) and caches the decoded pixels. The lint in an `apply_ops` reply skips the layers of a trace group; the `lint` tool still checks them.
 - `--doctor` prints `tracer: ok`, or why the tracer failed to load (exit 1). New agent-kit guide `trace`.
 - MIT license (`LICENSE`, `license` fields; the built bundle carries it in `dist/`).
 - CI: `pnpm/action-setup@v6` (Node 24); build runs before tests so the eval server tests run in CI.
