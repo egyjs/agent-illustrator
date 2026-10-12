@@ -4,7 +4,7 @@ import type { Box } from '../../src/geometry/types.ts';
 import { executeBatch, Registry, type BatchResult } from '../../src/ops/registry.ts';
 import { ellipse, line, polygon, rect } from '../../src/ops/shapes.ts';
 import { createDocument, type Doc, type GroupNode, type PathNode } from '../../src/scene/model.ts';
-import { docOf, expectIntact, groupNode } from '../fixtures.ts';
+import { docOf, expectIntact, groupNode, testImages } from '../fixtures.ts';
 
 const registry = new Registry().register(rect, ellipse, polygon, line);
 function run(ops: unknown[], doc: Doc = createDocument({ width: 800, height: 600 })): BatchResult {
@@ -92,7 +92,7 @@ describe('ops/shapes', () => {
   it('every shape example runs on an empty canvas', () => {
     for (const def of registry.list()) {
       for (const example of def.examples) {
-        expect(executeBatch(registry, createDocument({ width: 800, height: 600 }), example).ok).toBe(true);
+        expect(executeBatch(registry, createDocument({ width: 800, height: 600 }), example, { images: testImages }).ok).toBe(true);
       }
     }
   });

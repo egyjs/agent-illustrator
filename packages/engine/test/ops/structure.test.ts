@@ -4,7 +4,7 @@ import { createRegistry } from '../../src/ops/index.ts';
 import { executeBatch, type BatchResult } from '../../src/ops/registry.ts';
 import { createDocument, type Doc, type GroupNode } from '../../src/scene/model.ts';
 import { worldBounds } from '../../src/scene/query.ts';
-import { expectIntact } from '../fixtures.ts';
+import { expectIntact, testImages } from '../fixtures.ts';
 
 const registry = createRegistry();
 const font = (f: string) => fileURLToPath(new URL(`../../assets/fonts/${f}`, import.meta.url));
@@ -76,7 +76,7 @@ describe('ops/delete', () => {
 describe('ops: createRegistry', () => {
   it('registers every built-in op, and every example runs and ends with its op', () => {
     expect(registry.names()).toEqual([
-      'rect', 'ellipse', 'polygon', 'star', 'line', 'path_from_points', 'path_commands', 'round_corners', 'boolean', 'transform',
+      'rect', 'ellipse', 'polygon', 'star', 'line', 'path_from_points', 'path_commands', 'round_corners', 'trace', 'boolean', 'transform',
       'place', 'align', 'distribute', 'snap', 'style', 'tokens', 'palette', 'gradient', 'filter', 'mask',
       'blob', 'wave', 'roughen', 'scatter', 'repeat_along_path', 'array', 'text', 'text_on_path', 'set_text', 'group', 'ungroup', 'reorder', 'duplicate', 'rename', 'clip', 'delete',
     ]);
@@ -84,7 +84,7 @@ describe('ops: createRegistry', () => {
       expect(def.examples.length).toBeGreaterThan(0);
       for (const example of def.examples) {
         expect(example.at(-1)?.op).toBe(def.name);
-        expect(executeBatch(registry, createDocument({ width: 800, height: 600 }), example, { fonts }).ok).toBe(true);
+        expect(executeBatch(registry, createDocument({ width: 800, height: 600 }), example, { fonts, images: testImages }).ok).toBe(true);
       }
     }
   });

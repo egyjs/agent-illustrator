@@ -8,7 +8,7 @@ import { rect } from '../../src/ops/shapes.ts';
 import { toSvg } from '../../src/render/svg.ts';
 import { createDocument, type Doc, type PathNode, type TextNode } from '../../src/scene/model.ts';
 import { worldBounds, worldSubpaths } from '../../src/scene/query.ts';
-import { docOf, expectIntact, groupNode, pathNode } from '../fixtures.ts';
+import { docOf, expectIntact, groupNode, pathNode, testImages } from '../fixtures.ts';
 
 const registry = new Registry().register(blob, wave, roughen, rect);
 const fresh = (seed = 1): Doc => createDocument({ width: 800, height: 600, seed });
@@ -249,7 +249,7 @@ describe('ops/generators: all together', () => {
   it('every example runs on an empty canvas', () => {
     for (const def of registry.list()) {
       for (const example of def.examples) {
-        expect(executeBatch(registry, fresh(), example).ok).toBe(true);
+        expect(executeBatch(registry, fresh(), example, { images: testImages }).ok).toBe(true);
       }
     }
   });
