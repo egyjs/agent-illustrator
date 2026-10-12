@@ -20,4 +20,4 @@ Draw vector art with tool calls. The engine owns geometry, layout and rendering:
 6. Work in stages: plan, large shapes, detail, critique (`render`, `lint`), fix, `export_svg`. `history` checkpoints before risky steps.
 
 ## Guide topics
-`workflow`, `ops` (catalog), `op:<name>` (one op in full), `color`, `layout`, `shapes`, `generators`, `structure`, `text`, `critique`, `examples`, `presets`, `preset:<name>`, `text-only`.
+`workflow`, `ops` (catalog), `op:<name>` (one op in full), `color`, `layout`, `shapes`, `generators`, `structure`, `text`, `critique`, `trace`, `examples`, `presets`, `preset:<name>`, `text-only`.

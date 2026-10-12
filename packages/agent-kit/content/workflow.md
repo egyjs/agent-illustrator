@@ -7,6 +7,7 @@ Work coarse to fine, and look at the result between stages. Each stage is one or
 - Split the canvas into zones, for example sky 0-55%, hills 40-80%, foreground 70-100%.
 - Choose 3-5 colors. Call `create_document` with a `background`, then `palette` from one base color and refer to its tokens (`palette.primary`, `palette.primary.2`, `palette.accent`) everywhere.
 - If a style preset applies, `guide` topic `preset:<name>` gives its palette rules and defaults.
+- If you are given a reference image, read `guide` topic `trace`: `trace` it with `preview: true`, commit the best version, then refine it with the steps below.
 
 ## 2. Block in large shapes
 - Background, ground, sky, big masses: `rect`, `wave` with `bottom`, `path_from_points`, `blob`. Few ops, big areas, flat colors.
