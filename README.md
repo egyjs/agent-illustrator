@@ -36,7 +36,7 @@ Any other MCP client: run `npx -y agent-illustrator` as a stdio server.
 | Tool | What it does |
 |---|---|
 | `create_document` | New canvas; returns `doc_id` and the seed |
-| `apply_ops` | All-or-nothing batch of drawing ops; returns each op's id and exact bounds, plus `lint` issues for the nodes it touched |
+| `apply_ops` | All-or-nothing batch of drawing ops; returns each op's id and exact bounds, plus `lint` issues for the nodes it touched; `preview: true` returns a PNG of the result without committing |
 | `render` | PNG of the canvas, with optional id, bounds and grid overlays and a zoom region |
 | `describe_scene` | The scene as text: canvas, tokens, and the node tree with bounds and styles |
 | `measure` | Exact bounds, area and length of nodes, and the gaps and overlaps between them |
@@ -48,10 +48,12 @@ Any other MCP client: run `npx -y agent-illustrator` as a stdio server.
 
 Inputs and return values: [packages/mcp-server/README.md](packages/mcp-server/README.md#tool-reference).
 
+Give the agent the path of a reference PNG or JPEG and it can `trace` it into editable vector layers (one path per color), previewing the result before committing it. See [Reference images](packages/mcp-server/README.md#reference-images).
+
 ## Prompt and guide
 
 - The `illustrate` prompt takes a `brief`, an optional `style` preset (`flat`, `isometric-lite`, `line-art`) and `vision: "no"` for models that cannot see images (it adds the text-only guide).
-- `guide` with no topic lists the topics: `workflow`, `color`, `shapes`, `layout`, `generators`, `structure`, `text`, `critique`, `examples`, `text-only`, `ops` (all 36 ops by domain), `op:<name>` (one op in full), `presets` and `preset:<name>`.
+- `guide` with no topic lists the topics: `workflow`, `color`, `shapes`, `layout`, `generators`, `structure`, `text`, `critique`, `trace`, `examples`, `text-only`, `ops` (all 37 ops by domain), `op:<name>` (one op in full), `presets` and `preset:<name>`.
 - The server instructions (the core contract, under 30 lines) are sent to the client on connect.
 
 ## Limits and environment variables
@@ -81,4 +83,4 @@ Evaluation: render regression runs in `pnpm test`; the agent-quality harness dri
 
 ## License
 
-[MIT](LICENSE). Bundled Tajawal fonts: SIL Open Font License ([OFL.txt](packages/engine/assets/fonts/OFL.txt)).
+[MIT](LICENSE). Bundled Tajawal fonts: SIL Open Font License ([OFL.txt](packages/engine/assets/fonts/OFL.txt)). Image tracing uses VTracer ([@visioncortex/vtracer](https://github.com/visioncortex/vtracer), MIT OR Apache-2.0).
