@@ -11,6 +11,7 @@ import {
   rasterize,
   type Box,
   type Doc,
+  type ImageSource,
   type Limits,
   type LintIssue,
   type OpDef,
@@ -28,12 +29,14 @@ export type ToolDeps = {
   readonly registry: Registry;
   readonly config: ServerConfig;
   readonly fonts: RasterFonts;
+  readonly images: ImageSource;
   readonly log: Logger;
 };
 export type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: 'image/png' };
 export type ToolResult = { content: Content[]; isError?: boolean };
 
 export const text = (value: unknown): Content => ({ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) });
+const pngImage = (png: Uint8Array): Content => ({ type: 'image', data: Buffer.from(png).toString('base64'), mimeType: 'image/png' });
 
 /** Runs a tool body; engine errors and surprises both come back as isError results the model can act on. */
 export function guarded(deps: ToolDeps, tool: string, body: () => ToolResult): ToolResult {
@@ -103,6 +106,7 @@ export function applyOpsInputSchema(registry: Registry, limits: Limits): Record<
         items: { type: 'object', properties: { op: { type: 'string', enum: registry.names() } }, required: ['op'], additionalProperties: true },
       },
       dry_run: { type: 'boolean', description: 'Validate and report without changing the document' },
+      preview: { type: 'boolean', description: 'Run the batch without changing the document and return a PNG of the result; implies dry_run' },
     },
     required: ['doc_id', 'ops'],
     additionalProperties: false,
@@ -122,18 +126,28 @@ export function opSignature(def: OpDef): string {
 export const opSignatures = (registry: Registry): string => registry.list().map(opSignature).join('\n');
 
 /** The shape check only; op names, op fields and the batch size are the engine's to judge, with its hints. */
-const applyOpsInput = z.strictObject({ doc_id: z.string(), ops: z.array(z.unknown()), dry_run: z.boolean().optional() });
+const applyOpsInput = z.strictObject({ doc_id: z.string(), ops: z.array(z.unknown()), dry_run: z.boolean().optional(), preview: z.boolean().optional() });
 
 /** Issues beyond this many are left for an explicit lint call. */
 const MAX_BATCH_LINT_ISSUES = 10;
 
+/** Whether the node is a trace group or lies inside one. */
+function inTrace(doc: Doc, id: string): boolean {
+  for (let node = doc.nodes[id]; node !== undefined; node = node.parent === null ? undefined : doc.nodes[node.parent]) {
+    const source = node.meta?.source;
+    if (typeof source === 'object' && source !== null && (source as { kind?: unknown }).kind === 'trace') return true;
+  }
+  return false;
+}
+
 /**
- * Cheap lint of the nodes a committed batch created or changed, so mistakes show up in the same
+ * Cheap lint of the nodes a committed (or previewed) batch created or changed, so mistakes show up in the same
  * reply. Undefined when there is nothing to report; a failure here is logged and never fails the batch.
  */
 function lintTouched(deps: ToolDeps, doc: Doc, results: readonly OpOutcome[]): LintIssue[] | undefined {
   const named = results.flatMap((o) => (o.status === 'ok' ? [...(o.ids ?? []), ...(o.id === undefined ? [] : [o.id])] : []));
-  const ids = [...new Set(named)].filter((id) => Object.hasOwn(doc.nodes, id));
+  // Trace layers are stacked and overlap by design, and their specks are small on purpose, so lint has nothing useful to say about them.
+  const ids = [...new Set(named)].filter((id) => Object.hasOwn(doc.nodes, id) && !inTrace(doc, id));
   if (ids.length === 0) return undefined;
   try {
     const { issues } = lint(doc, { ids, checks: INCREMENTAL_CHECKS, maxIssues: MAX_BATCH_LINT_ISSUES, fonts: deps.fonts });
@@ -148,19 +162,33 @@ export function applyOpsTool(deps: ToolDeps, raw: unknown): ToolResult {
   return guarded(deps, 'apply_ops', () => {
     const input = parse(applyOpsInput, raw, 'apply_ops', { doc_id: 'doc-1a2b3c', ops: [{ op: 'rect', x: 10, y: 10, width: 100, height: 50 }] });
     const session = deps.sessions.get(input.doc_id);
+    const preview = input.preview ?? false;
+    // A preview runs the batch for real (dryRun false) so result.doc is the would-be document; it is never committed.
     const result = executeBatch(deps.registry, session.store.doc, input.ops, {
-      dryRun: input.dry_run ?? false,
+      dryRun: !preview && (input.dry_run ?? false),
       lastCreated: session.lastCreated,
       limits: deps.config.limits,
       fonts: deps.fonts,
+      images: deps.images,
     });
-    if (result.committed) {
+    const committed = result.committed && !preview;
+    if (committed) {
       session.store.commit(result.doc);
       session.lastCreated = result.lastCreated;
     }
     const issues = result.committed && result.ok ? lintTouched(deps, result.doc, result.results) : undefined;
-    const body = { ok: result.ok, committed: result.committed, doc_id: session.id, results: result.results.map(compact), ...(issues ? { lint: issues } : {}) };
-    return result.ok ? { content: [text(body)] } : { isError: true, content: [text(body)] };
+    const body = {
+      ok: result.ok,
+      committed,
+      ...(preview && result.ok ? { preview: true } : {}),
+      doc_id: session.id,
+      results: result.results.map(compact),
+      ...(issues ? { lint: issues } : {}),
+    };
+    if (!result.ok) return { isError: true, content: [text(body)] };
+    if (!preview) return { content: [text(body)] };
+    const raster = rasterize(result.doc, { fonts: deps.fonts, maxPixels: deps.config.maxRenderPixels });
+    return { content: [text(body), pngImage(raster.png)] };
   });
 }
 
@@ -199,7 +227,7 @@ export function renderTool(deps: ToolDeps, raw: unknown): ToolResult {
       file = undefined;
     }
     const summary = { doc_id: session.id, width: raster.width, height: raster.height, overlays: input.overlays ?? [], ...(file ? { file } : {}) };
-    return { content: [text(summary), { type: 'image', data: Buffer.from(raster.png).toString('base64'), mimeType: 'image/png' }] };
+    return { content: [text(summary), pngImage(raster.png)] };
   });
 }
 

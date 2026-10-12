@@ -7,6 +7,7 @@ import { loadAgentKit } from '../src/agent-kit.ts';
 import { fontFiles } from '../src/assets.ts';
 import { loadConfig } from '../src/config.ts';
 import { guideTool, illustratePrompt } from '../src/guide-tool.ts';
+import { imageSource } from '../src/images.ts';
 import { createLogger } from '../src/logging.ts';
 import { MemorySessionStore } from '../src/sessions.ts';
 import type { ToolDeps, ToolResult } from '../src/tools.ts';
@@ -28,7 +29,7 @@ for (const [file, body] of Object.entries(files)) {
 }
 const kit = loadAgentKit(dir);
 const config = loadConfig({});
-const deps: ToolDeps = { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), log: createLogger('silent') };
+const deps: ToolDeps = { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), images: imageSource(), log: createLogger('silent') };
 
 const body = (r: ToolResult) => (r.content[0] as { text: string }).text;
 const guide = (args: unknown) => guideTool(deps, kit, args);

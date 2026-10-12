@@ -8,7 +8,7 @@ high-level ops; the engine owns the geometry, renders PNG previews the agent can
 Requires Node.js 22.18 or newer. No native build step (resvg ships prebuilt binaries).
 
 ```sh
-npx -y agent-illustrator --doctor   # checks the bundled fonts and content
+npx -y agent-illustrator --doctor   # checks the bundled fonts and content, and that the tracer loads (`tracer: ok`)
 ```
 
 ## Client setup
@@ -30,7 +30,7 @@ Claude Desktop, Cursor, VS Code and other clients that read an `mcpServers` JSON
 | Tool | What it does |
 |---|---|
 | `create_document` | New canvas; returns `doc_id` and the seed |
-| `apply_ops` | All-or-nothing batch of drawing ops; per-op status, id, exact bounds, errors with hints, and `lint` issues for the nodes it touched |
+| `apply_ops` | All-or-nothing batch of drawing ops; per-op status, id, exact bounds, errors with hints, and `lint` issues for the nodes it touched; `preview: true` also returns a PNG of the result without changing the document |
 | `render` | PNG image (also written to disk), with optional id, bounds and grid overlays |
 | `describe_scene` | The scene as text: canvas, tokens, defs and the node tree |
 | `measure` | Exact bounds, area and length of nodes; gaps and overlaps between pairs |
@@ -40,10 +40,10 @@ Claude Desktop, Cursor, VS Code and other clients that read an `mcpServers` JSON
 | `export_svg` | Final SVG, optimized with SVGO |
 | `guide` | The drawing guides, presets and op reference |
 
-Ops (36), by domain:
+Ops (37), by domain:
 
 - shapes: `rect`, `ellipse`, `polygon`, `star`, `line`
-- paths: `path_from_points`, `path_commands`, `round_corners`
+- paths: `path_from_points`, `path_commands`, `round_corners`, `trace`
 - boolean: `boolean`
 - transform: `transform`
 - layout: `place`, `align`, `distribute`, `snap`
@@ -62,7 +62,7 @@ The `apply_ops` description lists each op's fields; `guide` topic `op:<name>` sh
 | Tool | Inputs | Returns |
 |---|---|---|
 | `create_document` | `width`, `height` (px, up to 16384), `background?` (CSS color; omit for transparent), `seed?` (integer; random when omitted) | `{ doc_id, width, height, seed, closed? }`; `closed` lists the documents closed to make room (see Limits) |
-| `apply_ops` | `doc_id`, `ops` (1 to 200 objects `{ "op": name, ... }`; see Limits), `dry_run?` (validate only) | `{ ok, committed, doc_id, results[], lint? }`; each result has `op`, `status`, `id`/`ids`, `bounds`, `warnings` or `error` |
+| `apply_ops` | `doc_id`, `ops` (1 to 200 objects `{ "op": name, ... }`; see Limits), `dry_run?` (validate only), `preview?` (run the batch without changing the document and return a PNG of the result; implies `dry_run`) | `{ ok, committed, preview?, doc_id, results[], lint? }`; each result has `op`, `status`, `id`/`ids`, `bounds`, `warnings` or `error`; with `preview` a successful call also returns a PNG image (`committed` is `false`) |
 | `render` | `doc_id`, `overlays?` (`ids`, `bounds`, `grid`), `region?` (`{ x, y, width, height }` in canvas px), `scale?` (up to 8; default 1), `grid?` (spacing in px) | A summary (`width`, `height`, `file`) and a PNG image |
 | `describe_scene` | `doc_id`, `detail?` (`outline`, `normal`, `full`), `root?` (one subtree), `max_nodes?` (1 to 2000; default 300) | `{ canvas, seed, tokens, defs, nodeCount, shown, truncated, hint?, nodes[] }`; the list also stops at about 256 KB of JSON, or 20000 path segments at `full`, and `hint` then says to use `root` or a lower `detail` |
 | `measure` | `doc_id`, `ids` (1 to 50 nodes) | `{ nodes: { id: { bounds, center, area, length } }, pairs[] }`; pairs (`gap`, `overlap`, `overlapArea`, `centerDistance`) for 2 to 12 ids |
@@ -74,7 +74,13 @@ The `apply_ops` description lists each op's fields; `guide` topic `op:<name>` sh
 
 Any failure comes back as an error result (`isError`) with `{ error: { code, message, hint } }`: `invalid_input`, `unknown_id`, `limit_exceeded` and so on. The hint says how to fix the call. In an `apply_ops` batch the error sits on the failing op, and nothing is applied.
 
-`apply_ops` lints the nodes a committed batch created or changed (the cheap checks only, at most 10 issues) and adds them as `lint`; the field is absent when there is nothing to report.
+`apply_ops` lints the nodes a committed batch created or changed (the cheap checks only, at most 10 issues) and adds them as `lint`; the field is absent when there is nothing to report. The layers of a `trace` group are skipped: they overlap on purpose.
+
+## Reference images
+
+The `trace` op turns a reference image into editable vectors, like Illustrator's Image Trace: it reduces the image to `colors` colors and traces each into one path, inside one group (`meta.source.kind` `trace`). `image` is the path of a PNG or JPEG file, absolute or relative to the server's working directory; the server reads it, so the agent passes a path, never pixels. Only vectors come back. Other inputs: `method` (`stacked`, the default, or `abutting`), `speckle`, `max_size`, `region` (a box of the image, in image px) and `x`, `y`, `width`, `height` (where the whole image goes on the canvas). The agent kit has a `trace` guide, and the usual flow is `apply_ops` with `preview: true` first, then the same call for real. Trace only images you have the rights to.
+
+Image files up to 25 MB and 36 megapixels are read (decoded once and kept in a small cache, so the preview and the commit that follows share one decode); a phone photo should be rotated upright first, because EXIF orientation is ignored. `--doctor` prints `tracer: ok`, or why VTracer (the WASM tracer) failed to load, and exits 1.
 
 ## Prompt
 
@@ -82,7 +88,7 @@ Any failure comes back as an error result (`isError`) with `{ error: { code, mes
 
 ## Limits
 
-Set with environment variables. Exceeding a limit returns an error that says which one; nothing hangs.
+Set with environment variables, except the image caps, which are fixed. Exceeding a limit returns an error that says which one; nothing hangs.
 
 | Variable | Default |
 |---|---|
@@ -95,6 +101,8 @@ Set with environment variables. Exceeding a limit returns an error that says whi
 | `AGENT_ILLUSTRATOR_RENDER_DIR` (PNG copies) | `<os tmp>/agent-illustrator` |
 | `AGENT_ILLUSTRATOR_DOCS_DIR` (`document_io` saves and loads) | `%LOCALAPPDATA%\agent-illustrator\docs` on Windows, else `$XDG_STATE_HOME` or `~/.local/state` + `/agent-illustrator/docs` (a folder for you alone, created with mode 700) |
 | `AGENT_ILLUSTRATOR_LOG_LEVEL` (stderr JSON logs) | `info` |
+| Image file read by `trace` (fixed) | 25 MB |
+| Image size decoded by `trace` (fixed) | 36 megapixels (about 6000×6000) |
 
 Heavy work (booleans, renders) runs synchronously and is bounded by these caps rather than by timeouts.
 Documents live in memory for the life of the server process, under random ids (`doc-3f9a1c`). When the

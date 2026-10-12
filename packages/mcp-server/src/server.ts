@@ -65,7 +65,7 @@ export function createServer(deps: ToolDeps, kit: AgentKit): McpServer {
         'like "50%" are relative to the canvas. Give nodes short semantic ids; "$last" is the most recent node. Returns each op\'s ' +
         'status, id and exact bounds, or errors with a hint.\nOps:\n' +
         opSignatures(deps.registry) +
-        `\nstyle fields: ${Object.keys(StyleSchema.shape).join(', ')}. fill and stroke take a CSS color, a token or "none". A committed batch also returns "lint" issues found on the nodes it touched.`,
+        `\nstyle fields: ${Object.keys(StyleSchema.shape).join(', ')}. fill and stroke take a CSS color, a token or "none". A committed batch also returns "lint" issues found on the nodes it touched. preview: true returns a PNG of the result without changing the document.`,
       inputSchema: advertise(applyOpsInputSchema(deps.registry, deps.config.limits)),
     },
     async (input) => logged(deps, 'apply_ops', input, () => applyOpsTool(deps, input)),

@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createRegistry, ENGINE_VERSION } from '@agent-illustrator/engine';
+import { createRegistry, ENGINE_VERSION, traceAvailable } from '@agent-illustrator/engine';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import pkg from '../package.json' with { type: 'json' };
 import { loadAgentKit } from './agent-kit.ts';
 import { agentKitDir, fontFiles, REQUIRED_AGENT_KIT_FILES } from './assets.ts';
 import { loadConfig } from './config.ts';
+import { imageSource } from './images.ts';
 import { createLogger } from './logging.ts';
 import { createServer } from './server.ts';
 import { MemorySessionStore } from './sessions.ts';
@@ -27,12 +28,15 @@ if (arg === '--version') {
   process.stderr.write(`agent-illustrator ${pkg.version} (engine ${ENGINE_VERSION})\n`);
   for (const file of kit.files) process.stderr.write(`agent-kit: ${join(dir, file)}\n`);
   for (const file of fonts.files) process.stderr.write(`font: ${file}\n`);
+  const tracer = traceAvailable();
+  process.stderr.write(`tracer: ${tracer === true ? 'ok' : tracer}\n`);
+  if (tracer !== true) process.exit(1);
 } else if (arg === undefined || arg === '--stdio') {
   const config = loadConfig();
   const log = createLogger(config.logLevel);
   const kit = loadAgentKit();
   const sessions = new MemorySessionStore(config.maxDocuments, (id) => log.warn({ doc_id: id, limit: config.maxDocuments }, 'closed the least recently used document'));
-  const deps = { sessions, registry: createRegistry(), config, fonts: fontFiles(), log };
+  const deps = { sessions, registry: createRegistry(), config, fonts: fontFiles(), images: imageSource(), log };
   log.info({ version: pkg.version, limits: config.limits }, 'serving MCP over stdio');
   await serveStdio(() => createServer(deps, kit));
 } else {

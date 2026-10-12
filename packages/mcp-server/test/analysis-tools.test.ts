@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { describeSceneTool, lintTool, measureTool } from '../src/analysis-tools.ts';
 import { fontFiles } from '../src/assets.ts';
 import { loadConfig } from '../src/config.ts';
+import { imageSource } from '../src/images.ts';
 import { createLogger } from '../src/logging.ts';
 import { MemorySessionStore } from '../src/sessions.ts';
 import { applyOpsTool, createDocumentTool, type ToolDeps, type ToolResult } from '../src/tools.ts';
@@ -18,7 +19,7 @@ vi.mock('@agent-illustrator/engine', async (importOriginal) => {
 
 function deps(): ToolDeps {
   const config = { ...loadConfig({}), renderDir: mkdtempSync(join(tmpdir(), 'ai-analysis-')) };
-  return { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), log: createLogger('silent') };
+  return { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), images: imageSource(), log: createLogger('silent') };
 }
 /** The reply body, untyped on purpose: the assertions below name the fields they rely on. */
 const json = (r: ToolResult) => JSON.parse((r.content[0] as { text: string }).text);

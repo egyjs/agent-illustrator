@@ -43,7 +43,7 @@ export const documentIoInput = z.object({
 
 const NAME = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}$/;
 /** Windows opens these as devices whatever the extension, so reading such a file name can hang the server. */
-const DEVICE = /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i;
+export const DEVICE = /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i;
 const EXT = '.json';
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 

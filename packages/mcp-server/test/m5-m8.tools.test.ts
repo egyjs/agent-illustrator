@@ -5,13 +5,14 @@ import { createRegistry, rasterize, type Box } from '@agent-illustrator/engine';
 import { describe, expect, it } from 'vitest';
 import { fontFiles } from '../src/assets.ts';
 import { loadConfig } from '../src/config.ts';
+import { imageSource } from '../src/images.ts';
 import { createLogger } from '../src/logging.ts';
 import { MemorySessionStore } from '../src/sessions.ts';
 import { applyOpsInputSchema, applyOpsTool, createDocumentTool, exportSvgTool, opSignatures, renderTool, type ToolDeps, type ToolResult } from '../src/tools.ts';
 
 function deps(): ToolDeps {
   const config = { ...loadConfig({}), renderDir: mkdtempSync(join(tmpdir(), 'ai-render-')) };
-  return { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), log: createLogger('silent') };
+  return { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), images: imageSource(), log: createLogger('silent') };
 }
 const json = (r: ToolResult) => JSON.parse((r.content[0] as { text: string }).text) as Record<string, unknown>;
 const open = (d: ToolDeps) => json(createDocumentTool(d, { width: 400, height: 200, background: 'white', seed: 7 })).doc_id as string;

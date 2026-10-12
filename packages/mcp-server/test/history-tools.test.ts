@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { fontFiles } from '../src/assets.ts';
 import { loadConfig } from '../src/config.ts';
 import { documentIoTool, historyTool } from '../src/history-tools.ts';
+import { imageSource } from '../src/images.ts';
 import { createLogger } from '../src/logging.ts';
 import { MemorySessionStore } from '../src/sessions.ts';
 import { applyOpsTool, createDocumentTool, type ToolDeps, type ToolResult } from '../src/tools.ts';
@@ -17,7 +18,7 @@ afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 function deps(env: Record<string, string> = {}): ToolDeps {
   const root = mkdtempSync(join(scratch, 'case-'));
   const config = { ...loadConfig(env), renderDir: join(root, 'renders'), docsDir: join(root, 'docs') };
-  return { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), log: createLogger('silent') };
+  return { sessions: new MemorySessionStore(config.maxDocuments), registry: createRegistry(), config, fonts: fontFiles(), images: imageSource(), log: createLogger('silent') };
 }
 const json = (r: ToolResult) => JSON.parse((r.content[0] as { text: string }).text) as { doc_id: string } & Record<string, unknown>;
 const open = (d: ToolDeps) => json(createDocumentTool(d, { width: 100, height: 100, background: 'white', seed: 7 })).doc_id;

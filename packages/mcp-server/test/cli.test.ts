@@ -31,4 +31,10 @@ describe('agent-illustrator cli', () => {
   it('--doctor also finds the bundled fonts', () => {
     expect(run('--doctor').stderr).toContain('Tajawal-Regular.ttf');
   });
+
+  it('--doctor reports that the tracer loads', () => {
+    const r = run('--doctor');
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/^tracer: ok$/m);
+  });
 });
