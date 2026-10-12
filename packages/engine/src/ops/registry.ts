@@ -5,6 +5,7 @@ import type { Box } from '../geometry/types.ts';
 import { resolvePaint } from '../scene/color.ts';
 import { isValidId, type Doc, type SceneNode, type Style } from '../scene/model.ts';
 import { getNode, requireNode, worldBounds } from '../scene/query.ts';
+import type { RasterImage } from '../render/image.ts';
 import type { RasterFonts } from '../render/raster.ts';
 
 /** A coordinate or length: canvas units, or a percent string such as "50%" (FR-2.1). */
@@ -16,6 +17,8 @@ export type Axis = 'x' | 'y' | 'min';
 export const MAX_COORD = 1e7;
 
 export type Warning = { readonly code: string; readonly message: string };
+/** Where ops get reference images: `get` resolves an op's `image` field (the server reads it as a file path) or throws an EngineError. */
+export type ImageSource = { get(ref: string): RasterImage };
 /** `data` carries results that are not nodes (token values, def names, text metrics) back to the caller. */
 export type OpResult = { readonly id?: string; readonly ids?: readonly string[]; readonly data?: Readonly<Record<string, unknown>> };
 
@@ -34,6 +37,8 @@ export interface OpContext {
   readonly limits: Limits;
   /** Font files for measuring text; without them, system fonts are used. */
   readonly fonts: RasterFonts | undefined;
+  /** A reference image from the batch's image source; throws invalid_input when the batch has none. */
+  image(ref: string): RasterImage;
   /** Applies an immer recipe; `doc` reflects it right away. */
   update(recipe: (draft: Draft<Doc>) => void): void;
   /** Resolves an id or "$last" to a node; throws unknown_id or invalid_reference. */
@@ -121,7 +126,13 @@ export type BatchResult = {
   readonly lastCreated?: string;
 };
 
-export type BatchOptions = { readonly dryRun?: boolean; readonly lastCreated?: string; readonly limits?: Partial<Limits>; readonly fonts?: RasterFonts };
+export type BatchOptions = {
+  readonly dryRun?: boolean;
+  readonly lastCreated?: string;
+  readonly limits?: Partial<Limits>;
+  readonly fonts?: RasterFonts;
+  readonly images?: ImageSource;
+};
 
 function paintError(doc: Doc, value: string): EngineError {
   const tokens = Object.keys(doc.tokens);
@@ -143,12 +154,21 @@ class Context implements OpContext {
   readonly fonts: RasterFonts | undefined;
   readonly warnings: Warning[] = [];
   readonly #claimed = new Set<string>();
+  readonly #images: ImageSource | undefined;
 
-  constructor(doc: Doc, last: string | undefined, limits: Limits, fonts: RasterFonts | undefined) {
+  constructor(doc: Doc, last: string | undefined, limits: Limits, fonts: RasterFonts | undefined, images: ImageSource | undefined) {
     this.doc = doc;
     this.last = last;
     this.limits = limits;
     this.fonts = fonts;
+    this.#images = images;
+  }
+
+  image(ref: string): RasterImage {
+    if (this.#images === undefined) {
+      throw new EngineError('invalid_input', 'this batch has no image source, so ops cannot read images', 'Library callers pass `images` to executeBatch.');
+    }
+    return this.#images.get(ref);
   }
 
   update(recipe: (draft: Draft<Doc>) => void): void {
@@ -324,7 +344,7 @@ export function executeBatch(registry: Registry, doc: Doc, calls: readonly unkno
   let last = options.lastCreated;
   const done: Done[] = [];
   for (const [i, p] of (parsed as Parsed[]).entries()) {
-    const ctx = new Context(current, last, limits, options.fonts);
+    const ctx = new Context(current, last, limits, options.fonts, options.images);
     try {
       const result = p.def.handler(p.input, ctx);
       const count = Object.keys(ctx.doc.nodes).length;

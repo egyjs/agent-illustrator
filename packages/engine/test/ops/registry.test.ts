@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { polyline } from '../../src/geometry/paths.ts';
 import { IDENTITY } from '../../src/geometry/transform.ts';
-import { defineOp, executeBatch, Length, MAX_COORD, Registry, type OpOutcome } from '../../src/ops/registry.ts';
+import { EngineError } from '../../src/errors.ts';
+import { defineOp, executeBatch, Length, MAX_COORD, Registry, type ImageSource, type OpOutcome } from '../../src/ops/registry.ts';
 import { createDocument, type Doc } from '../../src/scene/model.ts';
 import { insertNode } from '../../src/scene/store.ts';
 import { expectCode, expectIntact } from '../fixtures.ts';
@@ -171,5 +172,42 @@ describe('ops/registry: Registry', () => {
   it('refuses to register two ops with one name', () => {
     expect(() => new Registry().register(box, box)).toThrow('registered twice');
     expect(registry.names()).toEqual(['box', 'touch', 'crash']);
+  });
+});
+
+describe('ops/registry: images', () => {
+  const peek = defineOp({
+    name: 'peek',
+    domain: 'test',
+    description: 'reads an image size',
+    schema: z.strictObject({ image: z.string() }),
+    examples: [],
+    handler(input, ctx) {
+      const img = ctx.image(input.image);
+      return { data: { width: img.width, height: img.height } };
+    },
+  });
+  const reg = new Registry().register(peek);
+  const source: ImageSource = {
+    get(ref) {
+      if (ref !== 'a.png') throw new EngineError('invalid_input', `no image at "${ref}"`, 'Pass the path of a PNG or JPEG file.');
+      return { width: 3, height: 2, pixels: new Uint8Array(24) };
+    },
+  };
+
+  it('hands ops the images of the batch source', () => {
+    const r = executeBatch(reg, fresh(), [{ op: 'peek', image: 'a.png' }], { images: source });
+    expect(r.results[0]).toMatchObject({ status: 'ok', data: { width: 3, height: 2 } });
+  });
+
+  it('passes the source errors through', () => {
+    const r = executeBatch(reg, fresh(), [{ op: 'peek', image: 'b.png' }], { images: source });
+    expect(r.results[0]).toMatchObject({ status: 'error', error: { code: 'invalid_input', message: 'no image at "b.png"' } });
+  });
+
+  it('says how to supply images when the batch has no source', () => {
+    const r = executeBatch(reg, fresh(), [{ op: 'peek', image: 'a.png' }]);
+    expect(r.results[0]).toMatchObject({ status: 'error', error: { code: 'invalid_input' } });
+    expect(JSON.stringify(r.results[0])).toContain('images');
   });
 });

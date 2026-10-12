@@ -39,6 +39,7 @@ export {
   Registry,
   type BatchOptions,
   type BatchResult,
+  type ImageSource,
   type Limits,
   type OpCall,
   type OpDef,
