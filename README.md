@@ -159,6 +159,8 @@ pnpm build    # bundle packages/mcp-server/dist
 pnpm smoke    # round trip against the built bundle
 ```
 
+Releases: bump the version in the three `packages/*/package.json`, date the `CHANGELOG.md` section, commit, then push a `vX.Y.Z` tag. The `publish` workflow checks that the tag matches the version, runs every check, and publishes to npm through trusted publishing (no token; with provenance).
+
 Render regression fixtures in `eval/` (committed baselines, compared in CI) catch drift. The agent-quality harness drives Claude Code on your subscription, so run it by hand: `node eval/src/run.ts --model sonnet`. See [eval/README.md](eval/README.md).
 
 ## License

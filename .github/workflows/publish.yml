@@ -1,0 +1,46 @@
+name: publish
+
+# Publishes agent-illustrator to npm when a version tag (v1.2.3) is pushed. npm trusts this workflow
+# (trusted publishing over OIDC): no token is stored, and each version gets a provenance statement.
+# Run it by hand for a dry run: everything but the upload.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false # never restore a cache into a release build
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@11
+      - run: pnpm install --frozen-lockfile
+      - name: Tag matches the package version
+        if: github.event_name == 'push'
+        run: |
+          version=$(node -p "require('./packages/mcp-server/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match packages/mcp-server version $version"
+            exit 1
+          fi
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm smoke
+      # pnpm pack swaps the workspace's catalog: ranges for real versions.
+      - run: pnpm pack --pack-destination "$RUNNER_TEMP"
+        working-directory: packages/mcp-server
+      - name: Publish
+        run: npm publish "$RUNNER_TEMP"/agent-illustrator-*.tgz --access public ${{ github.event_name != 'push' && '--dry-run' || '' }}
