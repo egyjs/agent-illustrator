@@ -4,8 +4,8 @@ import { applyToSubpaths, compose, scale, translate } from '../geometry/transfor
 import type { Box } from '../geometry/types.ts';
 import { rngFor } from '../random/rng.ts';
 import type { RasterImage } from '../render/image.ts';
-import { isolines, layerField, loopArea } from '../trace/contour.ts';
-import { coverage, interiorPixels, shares, unexplained } from '../trace/coverage.ts';
+import { colorBoxes, grow, isolines, layerField, loopArea, smoothField, union } from '../trace/contour.ts';
+import { coverage, interiorPixels, noise, shares, unexplained } from '../trace/coverage.ts';
 import { fitLoop } from '../trace/fit.ts';
 import { quantize } from '../trace/quantize.ts';
 import { crop, downscale } from '../trace/resample.ts';
@@ -15,6 +15,10 @@ import { defineOp, Length, type OpContext } from './registry.ts';
 const pixels = (min: number) => z.number().int().min(min);
 /** How far (pixels) an abutting layer reaches under the colors above it: enough to cover curve-fitting error. */
 const ABUTTING_REACH = 2;
+/** Fewer pixels than this that no blend explains (a thin feature's color) are not worth a second palette round. */
+const MIN_THIN = 4;
+/** Above this grain (RMS premultiplied-RGBA distance inside shapes), layers are smoothed before outlining. */
+const NOISY = 2.5;
 
 /**
  * Where the whole image lands on the canvas: the box given by `width` and `height`; one of them with
@@ -93,7 +97,7 @@ export const trace = defineOp({
     let palette = paletteOf(inside);
     let cov = coverage(small, palette);
     const thin = unexplained(small, cov);
-    if (thin.length > 0) {
+    if (thin.length >= 4 * MIN_THIN) {
       const both = new Uint8Array(inside.length + thin.length);
       both.set(inside);
       both.set(thin, inside.length);
@@ -112,9 +116,18 @@ export const trace = defineOp({
     );
     const stem = group.slice(0, 58); // leaves room for "-<n>" inside the 64-character id limit
     const made: { id: string; color: string; share: number }[] = [];
+    const boxes = colorBoxes(cov, small.width, small.height, palette.length);
+    // Grainy images (photos, JPEG): smooth each layer before outlining, or noise along boundaries turns into swarms of specks.
+    const grainy = noise(cov) > NOISY;
     for (const [k, color] of palette.entries()) {
       // Each layer is traced and checked on its own, so a trace over the limit stops at the first such layer.
-      const loops = isolines(layerField(cov, small.width, small.height, k, method, ABUTTING_REACH), small.width, small.height);
+      // Its field and outlines are worked out only where it paints: around its color, or for stacked, its color and those above.
+      const own = method === 'stacked' ? union(boxes.slice(k)) : boxes[k] && grow(boxes[k], ABUTTING_REACH, small.width, small.height);
+      if (own === undefined) continue;
+      const field = layerField(cov, small.width, small.height, k, method, ABUTTING_REACH, own);
+      const loops = grainy
+        ? isolines(smoothField(field, small.width, small.height, own), small.width, small.height, grow(own, 2, small.width, small.height), true)
+        : isolines(field, small.width, small.height, own);
       const subpaths = loops.filter((loop) => Math.abs(loopArea(loop)) >= speckle * speckle).map((loop) => fitLoop(loop));
       if (subpaths.length === 0) continue;
       const segs = segmentCount(subpaths);

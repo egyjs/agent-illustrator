@@ -3,6 +3,7 @@
 ## Unreleased
 
 - `trace` op: reduces a reference PNG or JPEG to N colors and traces each into an editable path, abutting (default, no gaps between layers) or stacked, with `region` and placement. The 37th op. The palette comes from the flat insides of shapes (plus thin features no blend explains), edges are placed to a fraction of a pixel from the antialiasing, and outlines become exact lines with sharp corners, exact circles, or smoothed curves. On the reference logo it re-renders at 100% pixel similarity (99.95% at 4× zoom against the vector source).
+  Grainy images (photos, JPEG noise) are smoothed per layer before outlining; a 1024×768 photo at 12 colors traces in about 4 s.
 - `apply_ops` `preview: true` runs a batch without changing the document and returns a PNG of the result.
 - Image source: the server reads reference images from a file path (PNG or JPEG, up to 25 MB and 36 megapixels) and caches the decoded pixels. The lint in an `apply_ops` reply skips the layers of a trace group; the `lint` tool still checks them.
 - New agent-kit guide `trace`.

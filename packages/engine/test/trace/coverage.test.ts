@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coverage, interiorPixels, shares } from '../../src/trace/coverage.ts';
+import { coverage, interiorPixels, noise, shares } from '../../src/trace/coverage.ts';
 import type { Bitmap } from '../../src/trace/resample.ts';
 
 /** A w×h bitmap whose pixel (x, y) is `at(x, y)` as [r, g, b, a]. */
@@ -68,3 +68,14 @@ describe('trace/coverage: coverage', () => {
   });
 });
 
+
+describe('trace/coverage: noise', () => {
+  it('is about zero for clean flat color and grows with grain', () => {
+    const clean = bitmap(20, 20, (x) => [...rgb(x < 10 ? SKY : NAVY), 255]);
+    expect(noise(coverage(clean, [SKY, NAVY]))).toBeLessThan(0.5);
+    let seed = 7;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 10 - 5;
+    const grainy = bitmap(20, 20, (x) => [...rgb(x < 10 ? SKY : NAVY).map((v) => Math.round(v + rand())), 255]);
+    expect(noise(coverage(grainy, [SKY, NAVY]))).toBeGreaterThan(3);
+  });
+});

@@ -45,4 +45,5 @@ apply_ops({ doc_id, preview: true, ops: [
 ## Photos
 - Phone photos can carry an EXIF rotation that tracing ignores. Rotate such a photo upright and save it again before tracing, or the result is sideways.
 - Large images are read at full size, then reduced; files over 25 MB or 36 megapixels are refused. Scale them down first.
+- Grainy images (photos, JPEG noise) are smoothed before outlining, so boundaries come out clean instead of ragged; corners round off slightly. Clean flat art is traced exactly.
 - Transparent pixels are left out. A fully transparent image is an error.

@@ -20,7 +20,9 @@ const LINE_RMS = 0.06, LINE_MAX = 0.3;
 /** A corner-free loop counts as a circle when its points lie this close to the best circle (RMS, pixels). */
 const CIRCLE_RMS = 0.06;
 /** Taubin smoothing passes for curved runs. */
-const SMOOTHING = 60;
+const SMOOTHING = 30;
+/** Smoothed outlines are thinned to points about this far apart (pixels) before Bézier fitting. */
+const FIT_SPACING = 1.5;
 /** Outlines shorter than this (pixels) are kept as polygons. */
 const MIN_PERIMETER = 8;
 /** Half the outline length (pixels) over which turning is measured. */
@@ -144,6 +146,13 @@ function taubin(ps: readonly Vec2[], closed: boolean, passes = SMOOTHING): Vec2[
   return cur;
 }
 
+/** Every point at least `spacing` along from the last one kept; an open run keeps its last point. */
+function thin(ps: readonly Vec2[], closed: boolean, spacing = FIT_SPACING): Vec2[] {
+  const out: Vec2[] = [ps[0]!];
+  for (let i = 1; i < ps.length; i++) if (len(sub(ps[i]!, out.at(-1)!)) >= spacing || (!closed && i === ps.length - 1)) out.push(ps[i]!);
+  return out.length >= 3 || !closed ? out : ps.slice();
+}
+
 /** One traced outline (a closed polygon in pixels) as a smooth subpath. */
 export function fitLoop(loop: readonly Vec2[], options: FitOptions = {}): Subpath {
   const tolerance = options.tolerance ?? 0.04;
@@ -180,7 +189,7 @@ export function fitLoop(loop: readonly Vec2[], options: FitOptions = {}): Subpat
   if (corners.length === 0) {
     const round = circleOf(loop);
     if (round.rms <= CIRCLE_RMS) return circle(round.c, round.r);
-    return fit(taubin(loop, true), true, tolerance);
+    return fit(thin(taubin(loop, true), true), true, tolerance);
   }
 
   const runs: Vec2[][] = corners.map((c, k) => {
@@ -209,7 +218,7 @@ export function fitLoop(loop: readonly Vec2[], options: FitOptions = {}): Subpat
   const segs: Seg[] = [];
   runs.forEach((run, k) => {
     const pts = [vertex[k]!, ...run.slice(1, -1), vertex[(k + 1) % runs.length]!];
-    const piece = isStraightRun(pts) ? polyline([pts[0]!, pts.at(-1)!], false) : fit(taubin(pts, false), false, tolerance);
+    const piece = isStraightRun(pts) ? polyline([pts[0]!, pts.at(-1)!], false) : fit(thin(taubin(pts, false), false), false, tolerance);
     segs.push(...piece.segs);
   });
   return { start: vertex[0]!, segs, closed: true };

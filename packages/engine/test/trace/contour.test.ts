@@ -2,7 +2,7 @@ import { Resvg } from '@resvg/resvg-js';
 import { describe, expect, it } from 'vitest';
 import type { Vec2 } from '../../src/geometry/types.ts';
 import { decodeImage } from '../../src/render/image.ts';
-import { isolines, layerField, loopArea } from '../../src/trace/contour.ts';
+import { colorBoxes, grow, isolines, layerField, loopArea, smoothField, union } from '../../src/trace/contour.ts';
 import { coverage } from '../../src/trace/coverage.ts';
 
 /** A field that is 1 inside `on` and 0 elsewhere. */
@@ -60,5 +60,53 @@ describe('trace/contour: layerField', () => {
   it('stacked: a layer covers every color above it, never transparent pixels', () => {
     expect(row(layerField(cov, 7, 1, 0, 'stacked'))).toEqual([1, 1, 1, 1, 1, 1, 0]);
     expect(row(layerField(cov, 7, 1, 1, 'stacked'))).toEqual([0, 0, 1, 1, 1, 1, 0]);
+  });
+});
+
+describe('trace/contour: windows', () => {
+  const img = decodeImage(new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60"><rect width="80" height="60" fill="#ffffff"/><circle cx="50" cy="25" r="12" fill="#e63946"/><rect x="8" y="30" width="20" height="20" fill="#264653"/></svg>', { font: { loadSystemFonts: false } }).render().asPng());
+  const palette = ['#ffffff', '#e63946', '#264653'];
+  const cov = coverage(img, palette);
+
+  it('boxes each color where it has any coverage', () => {
+    const [white, red, navy] = colorBoxes(cov, 80, 60, 3);
+    expect(white).toEqual({ x: 0, y: 0, width: 80, height: 60 });
+    expect(red!.x).toBeGreaterThanOrEqual(37);
+    expect(red!.x + red!.width).toBeLessThanOrEqual(63);
+    expect(navy).toEqual({ x: 8, y: 30, width: 20, height: 20 });
+  });
+
+  it('traces the same outlines inside a box as over the whole image', () => {
+    const boxes = colorBoxes(cov, 80, 60, 3);
+    for (const k of [1, 2]) {
+      const box = grow(boxes[k]!, 2, 80, 60);
+      const whole = isolines(layerField(cov, 80, 60, k, 'abutting'), 80, 60);
+      const windowed = isolines(layerField(cov, 80, 60, k, 'abutting', 2, box), 80, 60, box);
+      expect(windowed.map((l) => l.length).sort()).toEqual(whole.map((l) => l.length).sort());
+      expect(windowed.flat().sort()).toEqual(whole.flat().sort());
+    }
+  });
+
+  it('unions boxes, and grows them inside the image', () => {
+    expect(union([{ x: 2, y: 3, width: 4, height: 5 }, undefined, { x: 10, y: 1, width: 2, height: 2 }])).toEqual({ x: 2, y: 1, width: 10, height: 7 });
+    expect(union([undefined])).toBeUndefined();
+    expect(grow({ x: 1, y: 1, width: 3, height: 3 }, 2, 5, 5)).toEqual({ x: 0, y: 0, width: 5, height: 5 });
+  });
+});
+
+describe('trace/contour: smoothField', () => {
+  it('leaves a straight edge where it was and cleans up a noisy one', () => {
+    // a vertical edge at x = 10, with salt-and-pepper flips along it
+    const w = 20, h = 20, f = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) f[y * w + x] = x < 10 ? 1 : 0;
+    const clean = smoothField(f, w, h);
+    const [loop] = isolines(clean, w, h, undefined, true);
+    const edge = loop!.filter(([x, y]) => x > 5 && y > 3 && y < 17);
+    expect(edge.length).toBeGreaterThan(10);
+    expect(edge.every(([x]) => Math.abs(x - 10) < 1e-6)).toBe(true);
+    const noisy = f.slice();
+    for (const [x, y] of [[9, 4], [10, 7], [9, 12], [11, 15]] as const) noisy[y * w + x] = 1 - noisy[y * w + x]!;
+    expect(isolines(noisy, w, h).length).toBeGreaterThan(1);
+    expect(isolines(smoothField(noisy, w, h), w, h, undefined, true)).toHaveLength(1);
   });
 });

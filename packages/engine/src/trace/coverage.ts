@@ -31,24 +31,21 @@ export function interiorPixels(img: Bitmap, tolerance = 6): Uint8Array {
   const { width: w, height: h, pixels: p } = img;
   const out = new Uint8Array(p.length);
   let n = 0;
+  const differs = (i: number, j: number) =>
+    Math.abs(p[i]! - p[j]!) > tolerance || Math.abs(p[i + 1]! - p[j + 1]!) > tolerance || Math.abs(p[i + 2]! - p[j + 2]!) > tolerance || Math.abs(p[i + 3]! - p[j + 3]!) > tolerance;
   for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - 1), y1 = Math.min(h - 1, y + 1);
     for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
+      const i = (y * w + x) * 4, x0 = Math.max(0, x - 1), x1 = Math.min(w - 1, x + 1);
       let flat = true;
-      for (let dy = -1; dy <= 1 && flat; dy++) {
-        for (let dx = -1; dx <= 1 && flat; dx++) {
-          const xx = x + dx, yy = y + dy;
-          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
-          const j = (yy * w + xx) * 4;
-          for (let c = 0; c < 4; c++) {
-            if (Math.abs(p[i + c]! - p[j + c]!) > tolerance) {
-              flat = false;
-              break;
-            }
-          }
-        }
+      for (let yy = y0; yy <= y1 && flat; yy++) for (let xx = x0; xx <= x1 && flat; xx++) if (differs(i, (yy * w + xx) * 4)) flat = false;
+      if (flat) {
+        out[4 * n] = p[i]!;
+        out[4 * n + 1] = p[i + 1]!;
+        out[4 * n + 2] = p[i + 2]!;
+        out[4 * n + 3] = p[i + 3]!;
+        n++;
       }
-      if (flat) out.set(p.subarray(i, i + 4), 4 * n++);
     }
   }
   return n >= MIN_INTERIOR ? out.slice(0, 4 * n) : p;
@@ -113,6 +110,7 @@ export function coverage(img: Bitmap, palette: readonly string[]): Coverage {
       const i = y * w + x;
       if (nearD[i]! < INTERIOR) continue;
       // A blend mixes colors that are there: the candidates are what this pixel and its neighbors are nearest to.
+      // With one candidate the pixel is inside a shape (noise or a color the palette lacks, not an edge) and keeps its nearest color.
       cand.length = 0;
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
@@ -122,6 +120,7 @@ export function coverage(img: Bitmap, palette: readonly string[]): Coverage {
           if (!cand.includes(k)) cand.push(k);
         }
       }
+      if (cand.length < 2) continue;
       let br = cand.length < 2 ? Infinity : blend(i, cand);
       // A color too thin to show up pure next to its blend (a hairline, say) is found among all of them.
       if (br > POOR_FIT) br = Math.min(br, blend(i, all, br));
@@ -171,5 +170,16 @@ export function unexplained(img: Bitmap, cov: Coverage, tolerance = 24): Uint8Ar
     }
   }
   return out.slice(0, 4 * n);
+}
+
+/** How far the insides of shapes stray from their palette colors: RMS premultiplied-RGBA distance (grain, JPEG noise). */
+export function noise(cov: Coverage): number {
+  let sum = 0, n = 0;
+  for (let i = 0; i < cov.a.length; i++) {
+    if (cov.a[i] !== cov.b[i] || cov.a[i] === cov.transparent) continue;
+    sum += cov.error[i]!;
+    n++;
+  }
+  return n > 0 ? Math.sqrt(sum / n) : 0;
 }
 
