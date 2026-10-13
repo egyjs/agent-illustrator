@@ -166,3 +166,22 @@ Pipeline (engine `trace/`, no tracing dependency; the approach follows open-vect
    - A circle is now 4 segments; VTracer used 65–126.
 
 Left: the edge band stops short of 99% because of per-pixel noise from the input's antialiasing (about 0.03 px), small glyph details, and pixels where three colors meet.
+
+## Resolved (2026-10-13): translucent colors and tints
+A flat 512×512 avatar icon was the test: a blue disc, a light rim that is 20% white over the blue, a head and body with a 20%-black shadow, and a 20%-black drop shadow on transparency. It found two faults.
+- **The drop shadow was lost.** The quantizer dropped pixels under alpha 128, and coverage treated every palette color as opaque. As a result, the image matched only 97.31% over white. Now:
+  - the palette keeps alpha (`#rrggbbaa`), from bins with 3 alpha bits, clustered in premultiplied OKLab plus alpha;
+  - coverage blends in premultiplied RGBA with each color's own alpha;
+  - pixels under alpha 16 count as transparent;
+  - translucent layers get `fillOpacity` and are drawn below every opaque layer, so no hidden abutting strip shows through them.
+- **Bumps where white met blue.** The rim color lies on the white–blue blend line, so an edge pixel was as exact a blend of rim and white as of white and blue. Rounding picked the pair, and a 20% edge pixel even counted as pure rim. Now:
+  - a non-flat pixel first tries pairs of the flat colors within 3 px (the colors truly on either side);
+  - that blend is kept when it fits within max(INTERIOR, min(nearest-color error, POOR_FIT));
+  - otherwise the old neighborhood and all-pairs search runs, so thin features and noise are unchanged.
+
+| Avatar, 1:1 | over white | over black | over magenta |
+|---|---|---|---|
+| before | 97.31% | 99.91% | 97.48% |
+| after | **99.99%** | **99.99%** | **99.99%** |
+
+The logo and mark scores did not change. `trace-fidelity.test.ts` gained a badge with a drop shadow.

@@ -20,6 +20,8 @@ export type Coverage = {
 const INTERIOR = 9;
 /** A blend the neighborhood's colors explain worse than this (squared distance) is tried against every pair of colors. */
 const POOR_FIT = 64;
+/** How far (pixels) an edge pixel looks for the flat colors on either side of it. */
+const FLAT_REACH = 3;
 /** Fewer flat pixels than this, and the palette is taken from every pixel. */
 const MIN_INTERIOR = 64;
 
@@ -51,13 +53,17 @@ export function interiorPixels(img: Bitmap, tolerance = 6): Uint8Array {
   return n >= MIN_INTERIOR ? out.slice(0, 4 * n) : p;
 }
 
-const rgbOf = (hex: string): number[] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+/** A palette color (#rrggbb, or #rrggbbaa when translucent) in premultiplied RGBA. */
+function premultiplied(hex: string): number[] {
+  const alpha = hex.length === 9 ? parseInt(hex.slice(7, 9), 16) : 255;
+  return [...[1, 3, 5].map((i) => (parseInt(hex.slice(i, i + 2), 16) * alpha) / 255), alpha];
+}
 
 /** Each pixel's two palette colors and the share of the first; see `Coverage`. */
 export function coverage(img: Bitmap, palette: readonly string[]): Coverage {
   const { width: w, height: h, pixels: px } = img;
   const transparent = palette.length;
-  const cols = [...palette.map((hex) => [...rgbOf(hex), 255]), [0, 0, 0, 0]];
+  const cols = [...palette.map(premultiplied), [0, 0, 0, 0]];
   const n = w * h;
   const a = new Uint8Array(n), b = new Uint8Array(n), t = new Float32Array(n).fill(1), error = new Float32Array(n);
   const nearest = new Uint8Array(n), nearD = new Float64Array(n);
@@ -95,21 +101,54 @@ export function coverage(img: Bitmap, palette: readonly string[]): Coverage {
         let r = 0;
         for (let c = 0; c < 4; c++) r += (P[i * 4 + c]! - (qb[c]! + s * (qa[c]! - qb[c]!))) ** 2;
         if (r < best) {
+          // A blend all of one color is that color alone: no partner with zero coverage.
           best = r;
-          a[i] = colors[u]!;
-          b[i] = colors[v]!;
-          t[i] = s;
+          a[i] = s > 0 ? colors[u]! : colors[v]!;
+          b[i] = s < 1 ? colors[v]! : colors[u]!;
+          t[i] = s > 0 ? s : 1;
         }
       }
     }
     return best;
   };
+  // Flat pixels: they and their 8 neighbors are all, within INTERIOR, the same palette color.
+  const flat = new Uint8Array(n);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      let ok = nearD[i]! < INTERIOR;
+      for (let yy = Math.max(0, y - 1); yy <= Math.min(h - 1, y + 1) && ok; yy++) {
+        for (let xx = Math.max(0, x - 1); xx <= Math.min(w - 1, x + 1) && ok; xx++) ok = nearest[yy * w + xx] === nearest[i] && nearD[yy * w + xx]! < INTERIOR;
+      }
+      flat[i] = ok ? 1 : 0;
+    }
+  }
   const cand: number[] = [];
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
+      if (flat[i]) continue;
+      // An edge pixel blends the colors on either side of it, which show up flat within a few pixels. A palette
+      // color that lies between them (a tint of one toward the other) can match the pixel as well: it must not win.
+      cand.length = 0;
+      for (let yy = Math.max(0, y - FLAT_REACH); yy <= Math.min(h - 1, y + FLAT_REACH); yy++) {
+        for (let xx = Math.max(0, x - FLAT_REACH); xx <= Math.min(w - 1, x + FLAT_REACH); xx++) {
+          const j = yy * w + xx;
+          if (flat[j] && !cand.includes(nearest[j]!)) cand.push(nearest[j]!);
+        }
+      }
+      if (cand.length >= 2) {
+        // Kept when it fits well, and no worse than the pixel's nearest color (a thin line of that color, say).
+        const br = blend(i, cand);
+        if (br <= Math.max(INTERIOR, Math.min(nearD[i]!, POOR_FIT))) {
+          error[i] = br;
+          continue;
+        }
+        a[i] = b[i] = nearest[i]!;
+        t[i] = 1;
+      }
       if (nearD[i]! < INTERIOR) continue;
-      // A blend mixes colors that are there: the candidates are what this pixel and its neighbors are nearest to.
+      // Otherwise (thin features, noise) the candidates are what this pixel and its neighbors are nearest to.
       // With one candidate the pixel is inside a shape (noise or a color the palette lacks, not an edge) and keeps its nearest color.
       cand.length = 0;
       for (let dy = -1; dy <= 1; dy++) {

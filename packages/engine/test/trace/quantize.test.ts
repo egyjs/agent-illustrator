@@ -47,6 +47,15 @@ describe('trace/quantize', () => {
     expect(Array.from(q.index.subarray(0, 10)).every((i) => i === TRANSPARENT)).toBe(true);
   });
 
+  it('keeps a translucent color apart from the same color opaque, with its alpha, and drops faint pixels', () => {
+    const run = (n: number, px: readonly number[]) => Array.from({ length: n }, () => px).flat();
+    const q = quantize(new Uint8Array([...run(10, [0, 15, 15, 51]), ...run(20, [0, 15, 15, 255]), ...run(5, [0, 0, 0, 8])]), 4, alea(1));
+    expect(q.palette).toEqual(['#000f0f', '#000f0f33']);
+    expect(q.counts).toEqual([20, 10]);
+    expect(q.index[0]).toBe(1);
+    expect(q.index[30]).toBe(TRANSPARENT);
+  });
+
   it('refuses a fully transparent image', () => {
     expectCode(() => quantize(pixels([[null, 10]]), 4, alea(1)), 'invalid_input');
   });

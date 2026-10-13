@@ -43,6 +43,27 @@ describe('trace/coverage: coverage', () => {
     expect(navyShare).toBeCloseTo(0.375, 2);
   });
 
+  it('blends the colors on either side even when a palette color lies between them', () => {
+    // RIM is 20% white over blue, so a white|blue edge pixel is as exact a blend of RIM and white:
+    // which pair wins must not come down to rounding. Row y has white covering (y + 1)/10 of the edge pixel.
+    const [BLUE, WHITE, RIM] = ['#5294e2', '#ffffff', '#75a9e8'];
+    const both = (left: string, right: string) => bitmap(9, 9, (x, y) => [...(x < 4 ? rgb(left) : x === 4 ? mix(left, right, (y + 1) / 10) : rgb(right)), 255]);
+    const share = (cov: ReturnType<typeof coverage>, i: number, k: number) => (cov.a[i] === k ? cov.t[i]! : 0) + (cov.b[i] === k && cov.b[i] !== cov.a[i] ? 1 - cov.t[i]! : 0);
+    for (const [left, k] of [[WHITE, 1], [RIM, 2]] as const) {
+      const cov = coverage(both(left, BLUE), [BLUE, WHITE, RIM]);
+      for (let y = 0; y < 9; y++) expect(share(cov, y * 9 + 4, k), `${left} row ${y}`).toBeCloseTo((y + 1) / 10, 1);
+    }
+  });
+
+  it('finds a thin feature’s color when the flat colors around it explain it badly', () => {
+    // transparent | the 1-pixel tip of a light rim, 69% covered | blue
+    const [BLUE, RIM] = ['#5294e2', '#75a9e8'];
+    const cov = coverage(bitmap(9, 5, (x) => (x < 4 ? [0, 0, 0, 0] : x === 4 ? [...rgb(RIM), 175] : [...rgb(BLUE), 255])), [BLUE, RIM]);
+    const i = 2 * 9 + 4;
+    expect(cov.a[i] === 1 ? cov.t[i]! : cov.b[i] === 1 ? 1 - cov.t[i]! : 0).toBeCloseTo(175 / 255, 1);
+    expect(cov.error[i]!).toBeLessThan(64);
+  });
+
   it('reads partial alpha as coverage against transparency', () => {
     const img = bitmap(3, 1, (x) => (x === 0 ? [200, 30, 30, 255] : x === 1 ? [200, 30, 30, 128] : [0, 0, 0, 0]));
     const cov = coverage(img, ['#c81e1e']);
@@ -50,6 +71,15 @@ describe('trace/coverage: coverage', () => {
     const red = cov.a[1] === 0 ? cov.t[1]! : 1 - cov.t[1]!;
     expect(red).toBeCloseTo(128 / 255, 2);
     expect([cov.a[2], cov.b[2]]).toEqual([1, 1]);
+  });
+
+  it('blends a translucent color with transparency by its own alpha', () => {
+    // a 20% shadow | its antialiased edge, 40% covered | transparent
+    const img = bitmap(3, 1, (x) => (x === 0 ? [0, 15, 15, 51] : x === 1 ? [0, 15, 15, 20] : [0, 0, 0, 0]));
+    const cov = coverage(img, ['#000f0f33']);
+    expect([cov.a[0], cov.b[0], cov.t[0]]).toEqual([0, 0, 1]);
+    const shadow = cov.a[1] === 0 ? cov.t[1]! : 1 - cov.t[1]!;
+    expect(shadow).toBeCloseTo(20 / 51, 2);
   });
 
   it('adds up each color’s coverage, transparent pixels left out', () => {

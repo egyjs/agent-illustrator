@@ -207,6 +207,19 @@ describe('ops/trace: layers', () => {
     expect(layers(two, 't').map((p) => p.style.fill)).toEqual(['#050505', '#ffffff']);
   });
 
+  it('keeps a soft shadow as a translucent layer, drawn at the bottom', () => {
+    const shadowed = rasterOf(100, 60, (x, y) => {
+      if (x >= 20 && x < 70 && y >= 10 && y < 40) return rgba(RED);
+      return x >= 25 && x < 75 && y >= 15 && y < 45 ? [0, 0, 0, 51] : [0, 0, 0, 0];
+    });
+    const r = run([{ op: 'trace', id: 't', image: 's.png', colors: 4 }], blank(), using(shadowed));
+    expect(layers(r, 't').map((p) => [p.style.fill, p.style.fillOpacity])).toEqual([
+      ['#000000', 0.2],
+      [RED, undefined],
+    ]);
+    expect(shares(r)).toMatchObject([{ color: '#000000', opacity: 0.2 }, { color: RED }]);
+  });
+
   it('is deterministic: the same ops on the same document give the same SVG', () => {
     const shaded = rasterOf(60, 40, (x, y) => [x * 4, y * 6, (x * y) % 256, 255]);
     const once = () => run([{ op: 'trace', id: 't', image: 'p.png', colors: 5 }], blank(800, 600, 7), using(shaded));

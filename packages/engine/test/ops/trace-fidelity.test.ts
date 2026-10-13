@@ -21,6 +21,10 @@ const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400">
 <path d="M0 400 L180 150 L330 400 Z" fill="#2a9d8f"/><path d="M200 400 L380 190 L600 400 Z" fill="#264653"/>
 <path d="M150 192 L180 150 L212 196 L190 186 L178 200 L165 188 Z" fill="#ffffff"/>
 <text x="40" y="70" font-size="48" font-family="Tajawal" font-weight="700" fill="#e63946">PEAK</text></svg>`;
+/** A badge with a soft drop shadow (20% black), which the trace keeps as a translucent layer. */
+const BADGE = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256">
+<circle cx="128" cy="134" r="110" fill="#000000" fill-opacity="0.2"/><circle cx="128" cy="128" r="110" fill="#5294e2"/>
+<circle cx="128" cy="92" r="34" fill="#ffffff"/><path d="M68 196 Q128 120 188 196 Z" fill="#ffffff"/></svg>`;
 const MARK = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><circle cx="150" cy="150" r="120" fill="#000000"/><path d="M95 160 L140 205 L215 105" fill="none" stroke="#ffffff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 function similarity(a: Uint8Array, b: Uint8Array): number {
@@ -45,6 +49,7 @@ describe('ops/trace: fidelity', () => {
   it.each([
     ['logo', LOGO, 6],
     ['mark', MARK, 2],
+    ['badge', BADGE, 3],
   ] as const)('reproduces the %s at 99% or better, at 1:1 and at 4× against its vector source', (_, svg, colors) => {
     const doc = trace(svg, colors);
     const one = render(svg);

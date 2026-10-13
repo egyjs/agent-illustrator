@@ -7,7 +7,8 @@ Op: `trace`. It reduces a PNG or JPEG to a few colors and traces each color into
 - The result is one group `id` holding a path per color: `<id>-1` is the largest color, drawn at the back, then smaller colors on top. By default (`abutting`) each layer is its color's area plus a hidden 2-pixel strip under the colors drawn above it, so visible edges are exact and no gaps show.
 - Edges are placed to a fraction of a pixel from the image's antialiasing; straight edges become lines with sharp corners and circles become circles, so the result is smooth and light on nodes. Hairlines and small dots keep their color.
 - The whole image is fitted to the canvas and centered. `x`, `y`, `width`, `height` place it otherwise; give one of `width` and `height` and the other follows the aspect ratio.
-- The reply lists each layer's `id`, `color` and `share` of the image, so you can see which layer is the background.
+- Translucent colors (a soft drop shadow, a glow) become layers with `fillOpacity`, drawn below every opaque layer.
+- The reply lists each layer's `id`, `color`, `opacity` (translucent layers only) and `share` of the image, so you can see which layer is the background.
 
 ## Preview, then commit
 Run the batch with `preview: true` first. It changes nothing and returns a PNG of the result: compare it with the reference, adjust `colors`, then run the same call without `preview`. Give the op an explicit `id` in both calls so the layer ids match. The palette depends only on the image, the options and the document seed, so the commit has the previewed colors.
@@ -46,4 +47,4 @@ apply_ops({ doc_id, preview: true, ops: [
 - Phone photos can carry an EXIF rotation that tracing ignores. Rotate such a photo upright and save it again before tracing, or the result is sideways.
 - Large images are read at full size, then reduced; files over 25 MB or 36 megapixels are refused. Scale them down first.
 - Grainy images (photos, JPEG noise) are smoothed before outlining, so boundaries come out clean instead of ragged; corners round off slightly. Clean flat art is traced exactly.
-- Transparent pixels are left out. A fully transparent image is an error.
+- Transparent pixels are left out, and so are pixels under about 6% opacity. A fully transparent image is an error.

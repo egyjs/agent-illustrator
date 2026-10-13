@@ -20,6 +20,11 @@ const MIN_THIN = 4;
 /** Above this grain (RMS premultiplied-RGBA distance inside shapes), layers are smoothed before outlining. */
 const NOISY = 2.5;
 
+/** A palette color as a fill and, for a translucent color (#rrggbbaa), its opacity. */
+function paint(hex: string): { fill: string; fillOpacity?: number } {
+  return hex.length === 9 ? { fill: hex.slice(0, 7), fillOpacity: Math.round((parseInt(hex.slice(7), 16) / 255) * 1000) / 1000 } : { fill: hex };
+}
+
 /**
  * Where the whole image lands on the canvas: the box given by `width` and `height`; one of them with
  * the other following the image's aspect; or neither, which fits the image inside the canvas. `x`
@@ -51,6 +56,7 @@ export const trace = defineOp({
   domain: 'paths',
   description:
     'Vectorize a reference image (PNG or JPEG): reduce it to `colors` colors, then trace each color into one editable path (evenodd) inside a new group, the most common color at the bottom. ' +
+    'Translucent colors (soft shadows, glows) keep their opacity as fillOpacity and go below every opaque layer. ' +
     'Edges are placed to a fraction of a pixel from the antialiasing, straight edges come out as lines with sharp corners, and circles as circles. ' +
     'method "abutting" (default): each layer is the area of its color plus a hidden strip under the colors above it, so visible edges are exact and no gaps show; "stacked": each layer runs under all the colors above it, so recoloring or deleting a top layer shows the one below. ' +
     'region traces part of the image, in its pixels; x, y, width, height place the whole image (default: fit the canvas), so traces of several regions line up. Trace only images you have the rights to.',
@@ -93,7 +99,11 @@ export const trace = defineOp({
     // The palette comes from the flat insides of shapes: edge pixels are blends that would win slots of their own.
     // Features too thin to have an inside show up as pixels no blend explains, and join a second round.
     const inside = interiorPixels(small);
-    const paletteOf = (px: Uint8Array) => quantize(px, colors, rngFor(ctx.doc.seed, input.image, 'trace')).palette;
+    // Translucent colors go to the bottom: no opaque layer's hidden strip may show through them.
+    const paletteOf = (px: Uint8Array) => {
+      const p = quantize(px, colors, rngFor(ctx.doc.seed, input.image, 'trace')).palette;
+      return [...p.filter((hex) => hex.length === 9), ...p.filter((hex) => hex.length !== 9)];
+    };
     let palette = paletteOf(inside);
     let cov = coverage(small, palette);
     const thin = unexplained(small, cov);
@@ -115,11 +125,12 @@ export const trace = defineOp({
       scale(region.width / small.width, region.height / small.height),
     );
     const stem = group.slice(0, 58); // leaves room for "-<n>" inside the 64-character id limit
-    const made: { id: string; color: string; share: number }[] = [];
+    const made: { id: string; color: string; opacity?: number; share: number }[] = [];
     const boxes = colorBoxes(cov, small.width, small.height, palette.length);
     // Grainy images (photos, JPEG): smooth each layer before outlining, or noise along boundaries turns into swarms of specks.
     const grainy = noise(cov) > NOISY;
-    for (const [k, color] of palette.entries()) {
+    for (const [k, hex] of palette.entries()) {
+      const { fill: color, fillOpacity: opacity } = paint(hex);
       // Each layer is traced and checked on its own, so a trace over the limit stops at the first such layer.
       // Its field and outlines are worked out only where it paints: around its color, or for stacked, its color and those above.
       const own = method === 'stacked' ? union(boxes.slice(k)) : boxes[k] && grow(boxes[k], ABUTTING_REACH, small.width, small.height);
@@ -140,10 +151,10 @@ export const trace = defineOp({
       }
       const id = addPath(
         ctx,
-        { id: `${stem}-${k + 1}`, parent: group, style: { fill: color } },
-        { prefix: group, subpaths: applyToSubpaths(toCanvas, subpaths), source: { kind: 'trace_layer', color }, fillRule: 'evenodd' },
+        { id: `${stem}-${k + 1}`, parent: group, style: paint(hex) },
+        { prefix: group, subpaths: applyToSubpaths(toCanvas, subpaths), source: { kind: 'trace_layer', color, ...(opacity !== undefined && { opacity }) }, fillRule: 'evenodd' },
       );
-      made.push({ id, color, share: total > 0 ? Math.round((sums[k]! / total) * 1000) / 1000 : 0 });
+      made.push({ id, color, ...(opacity !== undefined && { opacity }), share: total > 0 ? Math.round((sums[k]! / total) * 1000) / 1000 : 0 });
     }
     if (made.length === 0) {
       throw new EngineError('invalid_input', 'nothing left to trace after speckle filtering', 'Lower speckle or raise max_size.');
