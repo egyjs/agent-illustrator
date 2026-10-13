@@ -1,8 +1,12 @@
 {
   "name": "agent-illustrator",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "description": "Vector illustration engine for LLM agents, served over MCP.",
+  "keywords": ["mcp", "model-context-protocol", "mcp-server", "svg", "vector", "illustration", "llm", "agent", "image-trace"],
+  "homepage": "https://github.com/egyjs/agent-illustrator#readme",
+  "bugs": "https://github.com/egyjs/agent-illustrator/issues",
+  "repository": { "type": "git", "url": "git+https://github.com/egyjs/agent-illustrator.git", "directory": "packages/mcp-server" },
   "type": "module",
   "bin": { "agent-illustrator": "./dist/cli.mjs" },
   "files": ["dist"],

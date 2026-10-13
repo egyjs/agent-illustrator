@@ -10,24 +10,16 @@ Vector illustration for AI agents, served over MCP (stdio). The agent says what 
 
 ## Installation
 
-Requires **Node.js 22.18 or newer** and **pnpm** (`npm install -g pnpm`). No native build step: the renderer ships prebuilt binaries for Windows, macOS and Linux.
-
-The package is not on npm yet, so build it from source:
+Requires **Node.js 22.18 or newer**. No native build step: the renderer ships prebuilt binaries for Windows, macOS and Linux.
 
 ```sh
-git clone https://github.com/egyjs/agent-illustrator.git
-cd agent-illustrator
-pnpm install
-pnpm build
-node packages/mcp-server/dist/cli.mjs --doctor   # checks the bundled fonts and content
+npx -y agent-illustrator --doctor   # checks the bundled fonts and content
 ```
-
-The server is `packages/mcp-server/dist/cli.mjs`. Below, replace `/path/to/agent-illustrator` with the absolute path of your clone. On Windows use forward slashes, for example `C:/src/agent-illustrator`.
 
 ### Claude Code
 
 ```sh
-claude mcp add --scope user agent-illustrator -- node /path/to/agent-illustrator/packages/mcp-server/dist/cli.mjs
+claude mcp add --scope user agent-illustrator -- npx -y agent-illustrator
 ```
 
 Drop `--scope user` to add it to the current project only. Check it with `claude mcp list`.
@@ -40,14 +32,27 @@ Any client that reads an `mcpServers` block (for Claude Desktop, `claude_desktop
 {
   "mcpServers": {
     "agent-illustrator": {
-      "command": "node",
-      "args": ["/path/to/agent-illustrator/packages/mcp-server/dist/cli.mjs"]
+      "command": "npx",
+      "args": ["-y", "agent-illustrator"]
     }
   }
 }
 ```
 
-Any other MCP client: run `node packages/mcp-server/dist/cli.mjs` as a stdio server.
+Any other MCP client: run `npx -y agent-illustrator` as a stdio server.
+
+### From source
+
+With pnpm (`npm install -g pnpm`):
+
+```sh
+git clone https://github.com/egyjs/agent-illustrator.git
+cd agent-illustrator
+pnpm install
+pnpm build
+```
+
+Then use `node /path/to/agent-illustrator/packages/mcp-server/dist/cli.mjs` in place of `npx -y agent-illustrator` in the configs above. On Windows, write the path with forward slashes, for example `C:/src/agent-illustrator`.
 
 ## Usage
 
