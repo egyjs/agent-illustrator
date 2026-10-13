@@ -2,7 +2,7 @@ name: publish
 
 # Publishes agent-illustrator to npm when a version tag (v1.2.3) is pushed. npm trusts this workflow
 # (trusted publishing over OIDC): no token is stored, and each version gets a provenance statement.
-# Run it by hand for a dry run: everything but the upload.
+# Run it by hand for a dry run of the next version: everything but the upload.
 on:
   push:
     tags: ['v*']
@@ -43,4 +43,15 @@ jobs:
       - run: pnpm pack --pack-destination "$RUNNER_TEMP"
         working-directory: packages/mcp-server
       - name: Publish
-        run: npm publish "$RUNNER_TEMP"/agent-illustrator-*.tgz --access public ${{ github.event_name != 'push' && '--dry-run' || '' }}
+        if: github.event_name == 'push'
+        run: npm publish "$RUNNER_TEMP"/agent-illustrator-*.tgz --access public
+      # By hand: a dry run of the next version (bump it first); npm refuses a version it already has, even dry.
+      - name: Publish (dry run)
+        if: github.event_name != 'push'
+        run: |
+          version=$(node -p "require('./packages/mcp-server/package.json').version")
+          if npm view "agent-illustrator@$version" version > /dev/null 2>&1; then
+            echo "::notice::agent-illustrator@$version is already on npm: bump the version to dry-run the next release"
+          else
+            npm publish "$RUNNER_TEMP"/agent-illustrator-*.tgz --access public --dry-run
+          fi
